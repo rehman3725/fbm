@@ -1,0 +1,8 @@
+[2026-04-15 07:08:58 +0000] [526] [INFO] Starting gunicorn 25.3.0
+[2026-04-15 07:08:58 +0000] [526] [INFO] Listening at: http://0.0.0.0:5000 (526)
+[2026-04-15 07:08:58 +0000] [526] [INFO] Using worker: sync
+[2026-04-15 07:08:58 +0000] [538] [INFO] Booting worker with pid: 538
+[2026-04-15 07:08:58 +0000] [526] [INFO] Control socket listening at /home/runner/.gunicorn/gunicorn.ctl
+[2026-04-15 07:11:12 +0000] [526] [INFO] Handling signal: term
+[2026-04-15 07:11:12 +0000] [538] [INFO] Worker exiting (pid: 538)
+[2026-04-15 07:11:13 +0000] [526] [INFO] Shutting down: Master

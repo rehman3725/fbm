@@ -1,0 +1,203 @@
+{% extends "layout.html" %}
+
+{% block title %}FBM Rentals{% endblock %}
+
+{% block content %}
+<style>
+    .fbm-page-header{ background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(16,185,129,0.18)); border:1px solid rgba(148,163,184,.18); border-radius:18px; padding:22px 24px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .fbm-page-header h2{ margin:0; font-weight:700; }
+    .form-card{ border:1px solid var(--border-color); border-radius:18px; background: var(--surface-1); padding:24px; }
+    .fbm-table thead th{ text-transform:uppercase; letter-spacing:.7px; font-size:.75rem; color: var(--text-muted); border-bottom:1px solid var(--border-color); }
+    .status-badge{ display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:6px 12px; font-size:.8rem; font-weight:700; }
+    .status-active{ background: rgba(16,185,129,.16); color:#10b981; border:1px solid rgba(16,185,129,.3); }
+    .status-returned{ background: rgba(59,130,246,.16); color:#2563eb; border:1px solid rgba(59,130,246,.3); }
+    .status-transferred{ background: rgba(168,85,247,.16); color:#7c3aed; border:1px solid rgba(168,85,247,.3); }
+    .status-void{ background: rgba(248,113,113,.16); color:#dc2626; border:1px solid rgba(248,113,113,.3); }
+    .filter-bar{ display:flex; flex-wrap:wrap; gap:10px; padding:16px 18px; border-bottom:1px solid var(--border-color); background: var(--surface-1); margin-bottom:16px; }
+    .combobox-wrapper{ position:relative; }
+    .small-note{ color: var(--text-muted); font-size:.85rem; }
+</style>
+
+<div class="container-fluid">
+    <div class="fbm-page-header">
+        <div>
+            <h2><i class="bi bi-calendar-check me-2"></i>Rentals</h2>
+            <div class="subtitle">Create, manage and return rentals with client and item selectors.</div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ url_for('fbm_rentals.dashboard') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-house-door me-1"></i> FBM Home
+            </a>
+            <a href="{{ url_for('fbm_rentals.reports') }}" class="btn btn-outline-secondary">View Reports</a>
+        </div>
+    </div>
+
+    <div class="card form-card mb-4">
+        <h5 class="mb-3">{{ 'Edit Rental' if edit_rental else 'New Rental' }}</h5>
+        <form method="post" action="{{ url_for('fbm_rentals.rentals_save') }}">
+            {% if edit_rental %}
+            <input type="hidden" name="rental_id" value="{{ edit_rental.id }}">
+            {% endif %}
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Date</label>
+                    <input type="date" name="start_date" class="form-control" value="{{ edit_rental.start_datetime.strftime('%Y-%m-%d') if edit_rental else '' }}" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Time</label>
+                    <input type="time" name="start_time" class="form-control" value="{{ edit_rental.start_datetime.strftime('%H:%M') if edit_rental else '' }}" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Client</label>
+                    <select name="client_id" class="form-select" required>
+                        <option value="">Select client</option>
+                        {% for client in clients %}
+                        <option value="{{ client.id }}" {% if edit_rental and edit_rental.client_id == client.id %}selected{% endif %}>{{ client.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Item</label>
+                    <select id="item_select" name="item_id" class="form-select" required>
+                        <option value="">Select item</option>
+                        {% for item in items %}
+                        <option value="{{ item.id }}" data-rate="{{ item.rent_per_day }}" {% if edit_rental and edit_rental.item_id == item.id %}selected{% endif %}>{{ item.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Qty</label>
+                    <input id="qty" name="qty" type="number" class="form-control" min="1" value="{{ edit_rental.qty if edit_rental else '1' }}" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Rent Per Day</label>
+                    <input id="rent_per_unit" name="rent_per_unit" type="number" step="0.01" class="form-control" min="0" value="{{ edit_rental.rent_per_unit if edit_rental else '0.00' }}" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Total Amount</label>
+                    <input id="total_amount" type="text" class="form-control fw-semibold" readonly value="Rs. {{ '%.2f'|format(edit_rental.total_amount if edit_rental else 0) }}">
+                </div>
+                <div class="col-12 text-end">
+                    <button type="submit" class="btn btn-primary">{{ 'Update Rental' if edit_rental else 'Save Rental' }}</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <div class="filter-bar">
+            <div class="row g-2 flex-grow-1">
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label small mb-1">From</label>
+                    <input type="date" class="form-control form-control-sm" name="from_date" form="filterForm" value="{{ filters.from_date }}">
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label small mb-1">To</label>
+                    <input type="date" class="form-control form-control-sm" name="to_date" form="filterForm" value="{{ filters.to_date }}">
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label small mb-1">Client</label>
+                    <select class="form-select form-select-sm" name="client_id" form="filterForm">
+                        <option value="">All clients</option>
+                        {% for client in clients %}
+                        <option value="{{ client.id }}" {% if filters.client_id == client.id %}selected{% endif %}>{{ client.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label small mb-1">Status</label>
+                    <select class="form-select form-select-sm" name="status" form="filterForm">
+                        <option value="">All statuses</option>
+                        {% for status in ['active','returned','transferred','void'] %}
+                        <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status.title() }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <form id="filterForm" method="get" class="d-flex gap-2 align-items-end">
+                <button class="btn btn-sm btn-outline-secondary" type="submit">Filter</button>
+            </form>
+        </div>
+        <div class="card-body p-0 overflow-auto">
+            <table class="table table-hover align-middle fbm-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Client</th>
+                        <th>Item</th>
+                        <th>Qty</th>
+                        <th>Returned</th>
+                        <th>Remaining</th>
+                        <th>Rent/Day</th>
+                        <th>Total</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rental in rentals %}
+                    <tr>
+                        <td>{{ rental.start_datetime.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>{{ rental.client.full_name }}</td>
+                        <td>{{ rental.item.name }}</td>
+                        <td>{{ rental.qty }}</td>
+                        <td>{{ rental.qty_returned or 0 }}</td>
+                        <td>{{ rental.remaining_qty }}</td>
+                        <td>Rs. {{ '%.2f'|format(rental.rent_per_unit) }}</td>
+                        <td>Rs. {{ '%.2f'|format(rental.total_amount or rental.current_estimated_amount()) }}</td>
+                        <td>
+                            <span class="status-badge status-{{ rental.status }}">{{ rental.status.title() }}</span>
+                            {% if rental.balance_due and rental.balance_due > 0 %}
+                            <div class="small text-danger">Due: Rs. {{ '%.2f'|format(rental.balance_due) }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if rental.status == 'active' %}
+                            <a href="{{ url_for('fbm_rentals.rentals', edit_id=rental.id) }}" class="btn btn-sm btn-outline-primary me-1">Edit</a>
+                            <a href="{{ url_for('fbm_rentals.rentals_return', rental_id=rental.id) }}" class="btn btn-sm btn-outline-success me-1">Return</a>
+                            <a href="{{ url_for('fbm_rentals.rentals_transfer', rental_id=rental.id) }}" class="btn btn-sm btn-outline-warning me-1">Transfer</a>
+                            <form action="{{ url_for('fbm_rentals.rentals_void', rental_id=rental.id) }}" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Void this rental?');">Void</button>
+                            </form>
+                            {% else %}
+                            <span class="text-muted">No actions</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="10" class="text-center text-muted py-5">No rentals match the current filter.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const itemSelect = document.getElementById('item_select');
+    const rentPerUnit = document.getElementById('rent_per_unit');
+    const qtyField = document.getElementById('qty');
+    const totalAmount = document.getElementById('total_amount');
+
+    function updateTotal() {
+        const qty = parseFloat(qtyField.value) || 0;
+        const rate = parseFloat(rentPerUnit.value) || 0;
+        totalAmount.value = 'Rs. ' + (qty * rate).toFixed(2);
+    }
+
+    function updateRentFromItem() {
+        const selected = itemSelect.selectedOptions[0];
+        if (selected && selected.dataset.rate) {
+            rentPerUnit.value = parseFloat(selected.dataset.rate).toFixed(2);
+            updateTotal();
+        }
+    }
+
+    itemSelect.addEventListener('change', updateRentFromItem);
+    qtyField.addEventListener('input', updateTotal);
+    rentPerUnit.addEventListener('input', updateTotal);
+    updateRentFromItem();
+</script>
+{% endblock %}

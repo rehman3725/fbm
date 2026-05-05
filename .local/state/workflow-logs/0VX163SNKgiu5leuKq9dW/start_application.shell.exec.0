@@ -1,0 +1,8 @@
+[2026-04-15 07:11:13 +0000] [942] [INFO] Starting gunicorn 25.3.0
+[2026-04-15 07:11:13 +0000] [942] [INFO] Listening at: http://0.0.0.0:5000 (942)
+[2026-04-15 07:11:13 +0000] [942] [INFO] Using worker: sync
+[2026-04-15 07:11:13 +0000] [953] [INFO] Booting worker with pid: 953
+[2026-04-15 07:11:14 +0000] [942] [INFO] Control socket listening at /home/runner/.gunicorn/gunicorn.ctl
+[2026-04-15 07:20:04 +0000] [942] [INFO] Handling signal: term
+[2026-04-15 07:20:04 +0000] [953] [INFO] Worker exiting (pid: 953)
+[2026-04-15 07:20:04 +0000] [942] [INFO] Shutting down: Master

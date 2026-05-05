@@ -1,0 +1,200 @@
+{% extends "layout.html" %}
+
+{% block title %}FBM Rentals Reports{% endblock %}
+
+{% block content %}
+<style>
+    .fbm-page-header{ background: linear-gradient(135deg, rgba(71,85,199,0.18), rgba(16,185,129,0.18)); border:1px solid rgba(148,163,184,.18); border-radius:18px; padding:22px 24px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .fbm-page-header h2{ margin:0; font-weight:700; }
+    .summary-card{ border-radius:18px; border:1px solid var(--border-color); background: var(--surface-1); padding:22px; }
+    .summary-card h5{ margin-bottom:14px; }
+    .stat-grid{ display:grid; gap:16px; grid-template-columns: repeat(1, minmax(0, 1fr)); }
+    @media(min-width: 768px){ .stat-grid{ grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .stat-card{ border-radius:16px; padding:18px; background: var(--surface-2); border:1px solid var(--border-color); }
+    .stat-card .label{ font-size:.8rem; text-transform:uppercase; letter-spacing:.8px; color: var(--text-muted); }
+    .stat-card .value{ font-size:1.8rem; font-weight:800; margin-top:8px; }
+    .breakdown-list{ list-style:none; padding:0; margin:0; }
+    .breakdown-list li{ display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border-color); }
+    .breakdown-list li:last-child{ border-bottom:none; }
+    .fbm-table thead th{ text-transform:uppercase; letter-spacing:.7px; font-size:.75rem; color: var(--text-muted); border-bottom:1px solid var(--border-color); }
+</style>
+
+<div class="container-fluid">
+    <div class="fbm-page-header">
+        <div>
+            <h2><i class="bi bi-graph-up-arrow me-2"></i>Reports</h2>
+            <div class="subtitle">Filter rentals, revenue, pending amounts and transaction log.</div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ url_for('fbm_rentals.dashboard') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-house-door me-1"></i> FBM Home
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">From</label>
+                    <input type="date" class="form-control form-control-sm" name="from_date" value="{{ filters.from_date }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">To</label>
+                    <input type="date" class="form-control form-control-sm" name="to_date" value="{{ filters.to_date }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Client</label>
+                    <select class="form-select form-select-sm" name="client_id">
+                        <option value="">All clients</option>
+                        {% for client in clients %}
+                        <option value="{{ client.id }}" {% if filters.client_id == client.id %}selected{% endif %}>{{ client.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Item</label>
+                    <select class="form-select form-select-sm" name="item_id">
+                        <option value="">All items</option>
+                        {% for item in items %}
+                        <option value="{{ item.id }}" {% if filters.item_id == item.id %}selected{% endif %}>{{ item.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Status</label>
+                    <select class="form-select form-select-sm" name="status">
+                        <option value="">All statuses</option>
+                        {% for status in ['active','returned','transferred','void'] %}
+                        <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status.title() }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 text-end">
+                    <button type="submit" class="btn btn-primary w-100">Apply</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="mb-3">Stock Summary</h5>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle fbm-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Opening Qty</th>
+                            <th>Rented Qty</th>
+                            <th>Available Qty</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td>{{ item.name }}</td>
+                            <td>{{ item.opening_qty }}</td>
+                            <td>{{ item.rented_qty }}</td>
+                            <td>{{ item.available_qty }}</td>
+                            <td>{{ item.status.title() }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">No inventory items found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-grid mb-4">
+        <div class="stat-card">
+            <div class="label">Total revenue</div>
+            <div class="value">Rs. {{ '%.2f'|format(totals.total_revenue) }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Collected amount</div>
+            <div class="value">Rs. {{ '%.2f'|format(totals.collected_amount) }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Pending amount</div>
+            <div class="value">Rs. {{ '%.2f'|format(totals.pending_amount) }}</div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card summary-card">
+                <h5>Revenue by Client</h5>
+                <ul class="breakdown-list">
+                    {% for name, amount in by_client %}
+                    <li><span>{{ name }}</span><strong>Rs. {{ '%.2f'|format(amount) }}</strong></li>
+                    {% else %}
+                    <li class="text-muted">No client revenue yet.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card summary-card">
+                <h5>Revenue by Item</h5>
+                <ul class="breakdown-list">
+                    {% for name, amount in by_item %}
+                    <li><span>{{ name }}</span><strong>Rs. {{ '%.2f'|format(amount) }}</strong></li>
+                    {% else %}
+                    <li class="text-muted">No item revenue yet.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="card summary-card mb-4">
+        <h5 class="mb-3">Day-wise Summary</h5>
+        <ul class="breakdown-list">
+            {% for day, amount in by_day %}
+            <li><span>{{ day }}</span><strong>Rs. {{ '%.2f'|format(amount) }}</strong></li>
+            {% else %}
+            <li class="text-muted">No daily data available.</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0 overflow-auto">
+            <table class="table table-hover align-middle fbm-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Client</th>
+                        <th>Item</th>
+                        <th>Status</th>
+                        <th>Total</th>
+                        <th>Payment Account</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rental in rentals %}
+                    <tr>
+                        <td>{{ rental.start_datetime.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>{{ rental.client.full_name }}</td>
+                        <td>{{ rental.item.name }}</td>
+                        <td>{{ rental.status.title() }}</td>
+                        <td>Rs. {{ '%.2f'|format(rental.total_amount or rental.current_estimated_amount()) }}</td>
+                        <td>{{ rental.payment_account.name if rental.payment_account else '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-5">No records match the current filters.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

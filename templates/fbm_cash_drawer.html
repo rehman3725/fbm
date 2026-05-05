@@ -1,0 +1,462 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <h2 class="fw-bold text-warning mb-0"><i class="bi bi-safe2 me-2"></i>FBM Cash Drawer</h2>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('payments_page') }}" class="btn btn-outline-light btn-sm fw-bold">
+            <i class="bi bi-arrow-left me-1"></i> Back to Payments
+        </a>
+    </div>
+</div>
+
+<form method="GET" class="card border-0 shadow-sm p-3 mb-3 ui-helper-form" style="background: #0f172a; border: 2px solid #1f2937 !important; border-radius: 12px;">
+    <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-2">
+            <label class="text-white-50 small fw-bold mb-1">Date From</label>
+            <input type="date" name="date_from" class="form-control bg-dark text-white border-secondary" value="{{ date_from or '' }}">
+        </div>
+        <div class="col-12 col-md-2">
+            <label class="text-white-50 small fw-bold mb-1">Date To</label>
+            <input type="date" name="date_to" class="form-control bg-dark text-white border-secondary" value="{{ date_to or '' }}">
+        </div>
+        <div class="col-12 col-md-2">
+            <label class="text-white-50 small fw-bold mb-1">Flow</label>
+            <select name="flow" class="form-select bg-dark text-white border-secondary">
+                <option value="all" {% if flow == 'all' %}selected{% endif %}>All</option>
+                <option value="in" {% if flow == 'in' %}selected{% endif %}>Cash In</option>
+                <option value="out" {% if flow == 'out' %}selected{% endif %}>Cash Out</option>
+            </select>
+        </div>
+        <div class="col-12 col-md-3">
+            <label class="text-white-50 small fw-bold mb-1">Source</label>
+            <select name="source" class="form-select bg-dark text-white border-secondary">
+                <option value="all" {% if source == 'all' %}selected{% endif %}>All Sources</option>
+                <option value="manual" {% if source == 'manual' %}selected{% endif %}>Manual Entries</option>
+                <option value="client_payments" {% if source == 'client_payments' %}selected{% endif %}>Client Payments (Cash)</option>
+                <option value="material_sales" {% if source == 'material_sales' %}selected{% endif %}>Material Sold Cash</option>
+            </select>
+        </div>
+        <div class="col-12 col-md-3">
+            <label class="text-white-50 small fw-bold mb-1">Category</label>
+            <select name="category" class="form-select bg-dark text-white border-secondary">
+                <option value="">All Categories</option>
+                {% for c in categories %}
+                <option value="{{ c }}" {% if category_filter == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-2">
+            <label class="text-white-50 small fw-bold mb-1">Rows</label>
+            <select name="per_page" class="form-select bg-dark text-white border-secondary">
+                <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
+                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+            </select>
+        </div>
+        <div class="col-12 col-md-2 d-grid">
+            <button class="btn btn-warning text-dark fw-bold">Apply Filters</button>
+        </div>
+        <div class="col-12 col-md-2 d-grid">
+            <a href="{{ url_for('fbm_cash_drawer_page') }}" class="btn btn-outline-secondary fw-bold">Clear</a>
+        </div>
+    </div>
+</form>
+
+<div class="card border-0 shadow-sm mb-4" style="background: #111827; border: 2px solid #1f2937 !important; border-radius: 12px;">
+    <div class="card-body py-2">
+        <div class="small text-white-50">
+            Card click filters the list below for that KPI.
+        </div>
+    </div>
+</div>
+
+<div class="mb-2 text-white-50 small fw-bold text-uppercase">Selected Range / All Time</div>
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-6 col-xl-3">
+        <a class="text-decoration-none" href="{{ url_for('fbm_cash_drawer_page', date_from=date_from, date_to=date_to, category=category_filter, source='client_payments', flow='in', kpi='client_payments') }}">
+            <div class="card border-0 shadow-sm h-100" style="background: #1e293b; border: 2px solid #475569 !important; border-radius: 14px;">
+                <div class="card-body">
+                    <div class="text-white-50 small fw-bold mb-1">Client Payments (Cash)</div>
+                    <div class="h4 text-success mb-0">{{ currency_symbol }}{{ "%.2f"|format(period_kpis.client_cash_received or 0) }}</div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <a class="text-decoration-none" href="{{ url_for('fbm_cash_drawer_page', date_from=date_from, date_to=date_to, category=category_filter, source='material_sales', flow='in', kpi='material_sales') }}">
+            <div class="card border-0 shadow-sm h-100" style="background: #1e293b; border: 2px solid #475569 !important; border-radius: 14px;">
+                <div class="card-body">
+                    <div class="text-white-50 small fw-bold mb-1">Material Sold Cash</div>
+                    <div class="h4 text-success mb-0">{{ currency_symbol }}{{ "%.2f"|format(period_kpis.sale_cash_received or 0) }}</div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <a class="text-decoration-none" href="{{ url_for('fbm_cash_drawer_page', date_from=date_from, date_to=date_to, category=category_filter, source='manual', flow='out', kpi='cash_spent_manual') }}">
+            <div class="card border-0 shadow-sm h-100" style="background: #1e293b; border: 2px solid #475569 !important; border-radius: 14px;">
+                <div class="card-body">
+                    <div class="text-white-50 small fw-bold mb-1">Cash Spent (Manual)</div>
+                    <div class="h4 text-danger mb-0">{{ currency_symbol }}{{ "%.2f"|format(period_kpis.total_cash_out or 0) }}</div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <a class="text-decoration-none" href="{{ url_for('fbm_cash_drawer_page', date_from=date_from, date_to=date_to, source='all', flow='all', kpi='drawer_balance') }}">
+            <div class="card border-0 shadow-sm h-100" style="background: #052e16; border: 2px solid #16a34a !important; border-radius: 14px;">
+                <div class="card-body">
+                    <div class="text-white-50 small fw-bold mb-1">Current Drawer Balance</div>
+                    <div class="h4 text-warning mb-0">{{ currency_symbol }}{{ "%.2f"|format(period_kpis.current_balance or 0) }}</div>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="mb-2 text-white-50 small fw-bold text-uppercase">Today</div>
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100" style="background: #1e293b; border: 2px solid #334155 !important; border-radius: 14px;">
+            <div class="card-body">
+                <div class="text-white-50 small fw-bold mb-1">Client Payments (Cash)</div>
+                <div class="h5 text-success mb-0">{{ currency_symbol }}{{ "%.2f"|format(today_kpis.client_cash_received or 0) }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100" style="background: #1e293b; border: 2px solid #334155 !important; border-radius: 14px;">
+            <div class="card-body">
+                <div class="text-white-50 small fw-bold mb-1">Material Sold Cash</div>
+                <div class="h5 text-success mb-0">{{ currency_symbol }}{{ "%.2f"|format(today_kpis.sale_cash_received or 0) }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100" style="background: #1e293b; border: 2px solid #334155 !important; border-radius: 14px;">
+            <div class="card-body">
+                <div class="text-white-50 small fw-bold mb-1">Cash Spent (Manual)</div>
+                <div class="h5 text-danger mb-0">{{ currency_symbol }}{{ "%.2f"|format(today_kpis.total_cash_out or 0) }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100" style="background: #1e3a8a; border: 2px solid #60a5fa !important; border-radius: 14px;">
+            <div class="card-body">
+                <div class="text-white-50 small fw-bold mb-1">Today Drawer Balance</div>
+                <div class="h5 text-warning mb-0">{{ currency_symbol }}{{ "%.2f"|format(today_kpis.current_balance or 0) }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-8">
+        <div class="card border-0 shadow-sm h-100" style="background: #1e293b; border: 2px solid #475569 !important; border-radius: 14px;">
+            <div class="card-header bg-transparent border-secondary">
+                <h5 class="text-warning fw-bold mb-0">Add Drawer Entry</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('add_fbm_cash_drawer_entry') }}" class="row g-2 ui-helper-form">
+                    <div class="col-12 col-md-2">
+                        <label class="text-white-50 small fw-bold mb-1">Type</label>
+                        <select name="entry_type" class="form-select bg-dark text-white border-secondary">
+                            <option value="in">Cash In</option>
+                            <option value="out" selected>Cash Out</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-2">
+                        <label class="text-white-50 small fw-bold mb-1">Method</label>
+                        <select name="method" class="form-select bg-dark text-white border-secondary">
+                            <option value="Cash" selected>Cash</option>
+                            <option value="Bank">Bank</option>
+                            <option value="Check">Check</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-2">
+                        <label class="text-white-50 small fw-bold mb-1">Amount</label>
+                        <input type="number" step="0.01" min="0.01" name="amount" class="form-control bg-dark text-white border-secondary" required placeholder="0.00">
+                    </div>
+                    <div class="col-12 col-md-3 position-relative">
+                        <label class="text-white-50 small fw-bold mb-1">Category</label>
+                        <div class="input-group">
+                            <input type="text" name="category" id="addDrawerCategory" class="form-control bg-dark text-white border-secondary" placeholder="Tea, Petrol, Food..." autocomplete="off" required onfocus="showCombobox('addDrawerCategory', 'addDrawerCategoryList')" oninput="filterCombobox('addDrawerCategory', 'addDrawerCategoryList', 'addDrawerCategoryDisplay')">
+                            <button class="btn btn-outline-secondary" type="button" onclick="toggleCombobox('addDrawerCategory', 'addDrawerCategoryList')">
+                                <i class="bi bi-chevron-down text-warning"></i>
+                            </button>
+                        </div>
+                        <div id="addDrawerCategoryList" class="combobox-list shadow-lg" style="display:none; width:100%; top:100%; left:0;">
+                            {% for c in active_categories %}
+                            <div class="combobox-item" onclick="selectComboboxItem('addDrawerCategory', 'addDrawerCategoryList', '{{ c }}', '{{ c }}', 'addDrawerCategoryDisplay')">
+                                <span class="fw-bold text-warning code-span">{{ c }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div id="addDrawerCategoryDisplay" class="text-info small mt-1 fw-bold"></div>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="text-white-50 small fw-bold mb-1">Date</label>
+                        <input type="date" name="date" value="{{ today_date }}" class="form-control bg-dark text-white border-secondary">
+                    </div>
+                    <div class="col-12">
+                        <label class="text-white-50 small fw-bold mb-1">Note (Optional)</label>
+                        <input type="text" name="note" class="form-control bg-dark text-white border-secondary" placeholder="Any details...">
+                    </div>
+                    <div class="col-12 d-grid d-md-flex justify-content-md-end mt-2">
+                        <button class="btn btn-warning text-dark fw-bold px-4"><i class="bi bi-plus-lg me-1"></i> Save Entry</button>
+                    </div>
+                </form>
+                <div class="small text-white-50 mt-2">Back-date is supported by Date field. Only cash affects balance.</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-lg-4">
+        <div class="card border-0 shadow-sm h-100" style="background: #1e293b; border: 2px solid #475569 !important; border-radius: 14px;">
+            <div class="card-header bg-transparent border-secondary">
+                <h5 class="text-info fw-bold mb-0">Save Category</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('add_fbm_cash_drawer_category') }}" class="ui-helper-form">
+                    <label class="text-white-50 small fw-bold mb-1">Category Name</label>
+                    <div class="position-relative">
+                        <div class="input-group mb-2">
+                            <input type="text" name="name" id="addDrawerCategoryName" class="form-control bg-dark text-white border-secondary" placeholder="e.g. Daily Food" autocomplete="off" required onfocus="showCombobox('addDrawerCategoryName', 'addDrawerCategoryNameList')" oninput="filterCombobox('addDrawerCategoryName', 'addDrawerCategoryNameList', 'addDrawerCategoryNameDisplay')">
+                            <button class="btn btn-outline-secondary" type="button" onclick="toggleCombobox('addDrawerCategoryName', 'addDrawerCategoryNameList')">
+                                <i class="bi bi-chevron-down text-warning"></i>
+                            </button>
+                        </div>
+                        <div id="addDrawerCategoryNameList" class="combobox-list shadow-lg" style="display:none; width:100%; top:100%; left:0;">
+                            {% for c in categories %}
+                            <div class="combobox-item" onclick="selectComboboxItem('addDrawerCategoryName', 'addDrawerCategoryNameList', '{{ c }}', '{{ c }}', 'addDrawerCategoryNameDisplay')">
+                                <span class="fw-bold text-warning code-span">{{ c }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div id="addDrawerCategoryNameDisplay" class="text-info small mt-1 fw-bold"></div>
+                    </div>
+                    <button class="btn btn-outline-info w-100 fw-bold">Add Category</button>
+                </form>
+                <div class="small text-white-50 mt-2">Active categories appear in Add Drawer Entry category box.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4" style="background: #1e293b; border: 2px solid #475569 !important; border-radius: 14px; overflow: hidden;">
+    <div class="card-header bg-transparent border-secondary">
+        <h5 class="text-info fw-bold mb-0">Category Management</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle mb-0">
+            <thead style="background: #0f172a;">
+                <tr>
+                    <th class="ps-4 text-white-50">Category</th>
+                    <th class="text-white-50">Status</th>
+                    <th class="text-white-50">Created</th>
+                    <th class="text-white-50 text-end pe-4">Action</th>
+                </tr>
+            </thead>
+            <tbody style="background: #1e293b;">
+                {% for c in category_rows %}
+                <tr style="border-bottom: 1px solid #334155;">
+                    <td class="ps-4 fw-bold">{{ c.name }}</td>
+                    <td>
+                        {% if c.is_active %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Suspended</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-white-50 small">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '' }}</td>
+                    <td class="text-end pe-4">
+                        <button type="button" class="btn btn-outline-warning btn-sm border-2 rounded-pill shadow-sm me-1" data-bs-toggle="modal" data-bs-target="#editDrawerCategoryModal{{ c.id }}">
+                            Edit
+                        </button>
+                        <form method="POST" action="{{ url_for('toggle_fbm_cash_drawer_category', category_id=c.id) }}" class="d-inline">
+                            <button class="btn btn-outline-{% if c.is_active %}danger{% else %}success{% endif %} btn-sm border-2 rounded-pill shadow-sm">
+                                {% if c.is_active %}Suspend{% else %}Activate{% endif %}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center py-4 text-white-50">No categories yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm" style="background: #1e293b; border: 2px solid #475569 !important; border-radius: 14px; overflow: hidden;">
+    <div class="card-header bg-transparent border-secondary d-flex justify-content-between align-items-center">
+        <h5 class="text-info fw-bold mb-0">Drawer Entries</h5>
+        <span class="small text-white-50">Showing {{ drawer_rows|length }} of {{ total_rows }} | Non-cash ignored in KPI: {{ period_kpis.ignored_non_cash_entries }}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle mb-0">
+            <thead style="background: #0f172a;">
+                <tr>
+                    <th class="ps-4 text-white-50">Date</th>
+                    <th class="text-white-50">Source</th>
+                    <th class="text-white-50">Type</th>
+                    <th class="text-white-50">Method</th>
+                    <th class="text-white-50">Category</th>
+                    <th class="text-white-50">Ref/Name</th>
+                    <th class="text-white-50">Amount</th>
+                    <th class="text-white-50">Note</th>
+                    <th class="text-white-50 text-end pe-4">Action</th>
+                </tr>
+            </thead>
+            <tbody style="background: #1e293b;">
+                {% for row in drawer_rows %}
+                <tr style="border-bottom: 1px solid #334155;">
+                    <td class="ps-4">{{ row.date_posted.strftime('%Y-%m-%d') if row.date_posted else '' }}</td>
+                    <td class="text-info">{{ row.source }}</td>
+                    <td>
+                        {% if row.entry_type == 'in' %}
+                        <span class="badge bg-success">Cash In</span>
+                        {% else %}
+                        <span class="badge bg-danger">Cash Out</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ row.method or 'Cash' }}</td>
+                    <td>{{ row.category or '-' }}</td>
+                    <td class="text-white-50 small">{{ row.ref }}{% if row.label %} / {{ row.label }}{% endif %}</td>
+                    <td class="{% if row.entry_type == 'in' %}text-success{% else %}text-danger{% endif %} fw-bold">
+                        {{ currency_symbol }}{{ "%.2f"|format(row.amount or 0) }}
+                    </td>
+                    <td class="text-white-50">{{ row.note or '-' }}</td>
+                    <td class="text-end pe-4">
+                        {% if row.editable %}
+                        <button type="button" class="btn btn-outline-warning btn-sm border-2 rounded-pill shadow-sm me-1" data-bs-toggle="modal" data-bs-target="#editDrawerEntryModal{{ row.id }}">
+                            Edit
+                        </button>
+                        <form method="POST" action="{{ url_for('void_fbm_cash_drawer_entry', entry_id=row.id) }}" class="d-inline" onsubmit="return confirm('Void this drawer entry?')">
+                            <button class="btn btn-outline-danger btn-sm border-2 rounded-pill shadow-sm">Void</button>
+                        </form>
+                        {% else %}
+                        <span class="badge bg-secondary">Auto</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" class="text-center py-5 text-white-50">No entries found for current filter.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if total_pages > 1 %}
+<nav aria-label="FBM drawer pagination" class="d-flex justify-content-center mt-3 mb-4">
+    <ul class="pagination pagination-sm mb-0">
+        {% if page > 1 %}
+        <li class="page-item">
+            <a class="page-link bg-dark border-secondary text-warning"
+               href="{{ url_for('fbm_cash_drawer_page', date_from=date_from, date_to=date_to, flow=flow, source=source, category=category_filter, kpi=kpi, per_page=per_page, page=page-1) }}">Previous</a>
+        </li>
+        {% endif %}
+        <li class="page-item active">
+            <span class="page-link bg-warning border-warning text-dark">{{ page }} / {{ total_pages }}</span>
+        </li>
+        {% if page < total_pages %}
+        <li class="page-item">
+            <a class="page-link bg-dark border-secondary text-warning"
+               href="{{ url_for('fbm_cash_drawer_page', date_from=date_from, date_to=date_to, flow=flow, source=source, category=category_filter, kpi=kpi, per_page=per_page, page=page+1) }}">Next</a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+{% for row in drawer_rows if row.editable %}
+<div class="modal fade" id="editDrawerEntryModal{{ row.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <form class="modal-content border-secondary ui-helper-form" style="background: #1e293b;" method="POST" action="{{ url_for('edit_fbm_cash_drawer_entry', entry_id=row.id) }}">
+            <div class="modal-header border-0">
+                <h5 class="text-warning fw-bold mb-0">Edit Drawer Entry</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="text-white-50 small fw-bold mb-1">Type</label>
+                        <select name="entry_type" class="form-select bg-dark text-white border-secondary">
+                            <option value="in" {% if row.entry_type == 'in' %}selected{% endif %}>Cash In</option>
+                            <option value="out" {% if row.entry_type != 'in' %}selected{% endif %}>Cash Out</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="text-white-50 small fw-bold mb-1">Method</label>
+                        <select name="method" class="form-select bg-dark text-white border-secondary">
+                            <option value="Cash" {% if row.method == 'Cash' %}selected{% endif %}>Cash</option>
+                            <option value="Bank" {% if row.method == 'Bank' %}selected{% endif %}>Bank</option>
+                            <option value="Check" {% if row.method in ['Check', 'Cheque'] %}selected{% endif %}>Check</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="text-white-50 small fw-bold mb-1">Amount</label>
+                        <input type="number" step="0.01" min="0.01" name="amount" class="form-control bg-dark text-white border-secondary" value="{{ row.amount }}" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="text-white-50 small fw-bold mb-1">Date</label>
+                        <input type="date" name="date" class="form-control bg-dark text-white border-secondary" value="{{ row.date_posted.strftime('%Y-%m-%d') if row.date_posted else '' }}">
+                    </div>
+                    <div class="col-12 position-relative">
+                        <label class="text-white-50 small fw-bold mb-1">Category</label>
+                        <div class="input-group">
+                            <input type="text" name="category" id="editDrawerCategory{{ row.id }}" class="form-control bg-dark text-white border-secondary" value="{{ row.category or '' }}" autocomplete="off" required onfocus="showCombobox('editDrawerCategory{{ row.id }}', 'editDrawerCategoryList{{ row.id }}')" oninput="filterCombobox('editDrawerCategory{{ row.id }}', 'editDrawerCategoryList{{ row.id }}', 'editDrawerCategoryDisplay{{ row.id }}')">
+                            <button class="btn btn-outline-secondary" type="button" onclick="toggleCombobox('editDrawerCategory{{ row.id }}', 'editDrawerCategoryList{{ row.id }}')">
+                                <i class="bi bi-chevron-down text-warning"></i>
+                            </button>
+                        </div>
+                        <div id="editDrawerCategoryList{{ row.id }}" class="combobox-list shadow-lg" style="display:none; width:100%; top:100%; left:0;">
+                            {% for c in active_categories %}
+                            <div class="combobox-item" onclick="selectComboboxItem('editDrawerCategory{{ row.id }}', 'editDrawerCategoryList{{ row.id }}', '{{ c }}', '{{ c }}', 'editDrawerCategoryDisplay{{ row.id }}')">
+                                <span class="fw-bold text-warning code-span">{{ c }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div id="editDrawerCategoryDisplay{{ row.id }}" class="text-info small mt-1 fw-bold"></div>
+                    </div>
+                    <div class="col-12">
+                        <label class="text-white-50 small fw-bold mb-1">Note</label>
+                        <input type="text" name="note" class="form-control bg-dark text-white border-secondary" value="{{ row.note or '' }}">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-warning text-dark fw-bold">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endfor %}
+
+{% for c in category_rows %}
+<div class="modal fade" id="editDrawerCategoryModal{{ c.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <form class="modal-content border-secondary ui-helper-form" style="background: #1e293b;" method="POST" action="{{ url_for('edit_fbm_cash_drawer_category', category_id=c.id) }}">
+            <div class="modal-header border-0">
+                <h5 class="text-warning fw-bold mb-0">Edit Category</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="text-white-50 small fw-bold mb-1">Category Name</label>
+                <input type="text" name="name" class="form-control bg-dark text-white border-secondary" value="{{ c.name }}" required>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-warning text-dark fw-bold">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

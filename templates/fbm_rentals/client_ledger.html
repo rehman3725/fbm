@@ -1,0 +1,89 @@
+{% extends "layout.html" %}
+
+{% block title %}FBM Rental Ledger - {{ client.full_name }}{% endblock %}
+
+{% block content %}
+<style>
+    .fbm-page-header{ background: linear-gradient(135deg, rgba(79,70,229,0.18), rgba(16,185,129,0.18)); border:1px solid rgba(148,163,184,.18); border-radius:18px; padding:22px 24px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .fbm-page-header h2{ margin:0; font-weight:700; }
+    .summary-card{ border:1px solid var(--border-color); border-radius:18px; background: var(--surface-1); padding:24px; margin-bottom:24px; }
+    .stat-grid{ display:grid; gap:16px; grid-template-columns: repeat(1, minmax(0, 1fr)); }
+    @media(min-width: 768px){ .stat-grid{ grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .stat-card{ border-radius:16px; padding:18px; background: var(--surface-2); border:1px solid var(--border-color); }
+    .stat-card .label{ font-size:.8rem; text-transform:uppercase; letter-spacing:.8px; color: var(--text-muted); }
+    .stat-card .value{ font-size:1.5rem; font-weight:800; margin-top:8px; }
+    .fbm-table thead th{ text-transform:uppercase; letter-spacing:.7px; font-size:.75rem; color: var(--text-muted); border-bottom:1px solid var(--border-color); }
+</style>
+
+<div class="container-fluid">
+    <div class="fbm-page-header">
+        <div>
+            <h2><i class="bi bi-journal-text me-2"></i>Rental Ledger</h2>
+            <div class="subtitle">Rental history, return payments, and outstanding balances for {{ client.full_name }}.</div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ url_for('fbm_rentals.clients') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Back to Clients
+            </a>
+        </div>
+    </div>
+
+    <div class="stat-grid mb-4">
+        <div class="stat-card">
+            <div class="label">Total rentals</div>
+            <div class="value">{{ rentals|length }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Total due</div>
+            <div class="value">Rs. {{ '%.2f'|format(total_due) }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Active estimated</div>
+            <div class="value">Rs. {{ '%.2f'|format(total_estimated) }}</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0 overflow-auto">
+            <table class="table table-hover align-middle fbm-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Rental ID</th>
+                        <th>Start Date</th>
+                        <th>Item</th>
+                        <th>Qty</th>
+                        <th>Returned</th>
+                        <th>Remaining</th>
+                        <th>Status</th>
+                        <th>Total billed</th>
+                        <th>Paid</th>
+                        <th>Discount</th>
+                        <th>Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rental in rentals %}
+                    <tr>
+                        <td>#{{ rental.id }}</td>
+                        <td>{{ rental.start_datetime.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>{{ rental.item.name }}</td>
+                        <td>{{ rental.qty }}</td>
+                        <td>{{ rental.qty_returned or 0 }}</td>
+                        <td>{{ rental.remaining_qty }}</td>
+                        <td>{{ rental.status.title() }}</td>
+                        <td>Rs. {{ '%.2f'|format(rental.total_amount or 0) }}</td>
+                        <td>Rs. {{ '%.2f'|format(rental.paid_amount or 0) }}</td>
+                        <td>Rs. {{ '%.2f'|format(rental.discount_amount or 0) }}</td>
+                        <td>Rs. {{ '%.2f'|format(rental.balance_due) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="11" class="text-center text-muted py-5">No rental activity found for this client.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

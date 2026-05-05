@@ -1,0 +1,8 @@
+[2026-04-15 07:20:05 +0000] [1639] [INFO] Starting gunicorn 25.3.0
+[2026-04-15 07:20:05 +0000] [1639] [INFO] Listening at: http://0.0.0.0:5000 (1639)
+[2026-04-15 07:20:05 +0000] [1639] [INFO] Using worker: sync
+[2026-04-15 07:20:05 +0000] [1649] [INFO] Booting worker with pid: 1649
+[2026-04-15 07:20:05 +0000] [1639] [INFO] Control socket listening at /home/runner/.gunicorn/gunicorn.ctl
+[2026-04-15 07:22:09 +0000] [1639] [INFO] Handling signal: term
+[2026-04-15 07:22:09 +0000] [1649] [INFO] Worker exiting (pid: 1649)
+[2026-04-15 07:22:09 +0000] [1639] [INFO] Shutting down: Master
