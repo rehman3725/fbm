@@ -32,6 +32,38 @@ def _safe_copy_db(db_path: str, backup_dir: str) -> str | None:
         return None
 
 
+def _cleanup_reconcile_backups(backup_dir: str, *, keep: int = 10) -> int:
+    try:
+        keep = int(keep or 0)
+    except Exception:
+        keep = 10
+    keep = max(0, keep)
+    try:
+        if not backup_dir or not os.path.isdir(backup_dir) or keep <= 0:
+            return 0
+        files = []
+        for name in os.listdir(backup_dir):
+            if not name.startswith("recon_backup_") or not name.lower().endswith(".db"):
+                continue
+            path = os.path.join(backup_dir, name)
+            try:
+                st = os.stat(path)
+            except Exception:
+                continue
+            files.append((st.st_mtime, path))
+        files.sort(reverse=True)  # newest first
+        removed = 0
+        for _, path in files[keep:]:
+            try:
+                os.remove(path)
+                removed += 1
+            except Exception:
+                pass
+        return removed
+    except Exception:
+        return 0
+
+
 def reconcile_material_totals(*, tolerance=0.01) -> dict:
     """
     Make Material.total match net stock from Entry rows:
@@ -289,13 +321,16 @@ def run_auto_reconcile(app, *, interval_seconds=600, tolerance=0.01, fix=True) -
         try:
             with app.app_context():
                 # Optional DB file backup
+                enable_backup = os.environ.get("AUTO_RECONCILE_DB_BACKUP", "1").strip() != "0"
+                keep_backups = os.environ.get("AUTO_RECONCILE_BACKUP_KEEP", "10").strip()
                 db_uri = app.config.get("SQLALCHEMY_DATABASE_URI") or ""
                 db_path = ""
                 if db_uri.startswith("sqlite:///"):
                     db_path = db_uri.replace("sqlite:///", "", 1)
-                if db_path:
+                if enable_backup and db_path:
                     backup_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "instance", "reconcile_backups"))
                     _safe_copy_db(db_path, backup_dir)
+                    _cleanup_reconcile_backups(backup_dir, keep=int(keep_backups or 10))
 
                 reconcile_direct_sale_item_names(tolerance=tolerance)
                 reconcile_material_totals(tolerance=tolerance)
