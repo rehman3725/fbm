@@ -5,14 +5,14 @@ Provides comprehensive finance management including payments, receipts, expendit
 
 import logging
 import re
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 from sqlalchemy import func, or_, and_
 from sqlalchemy.exc import IntegrityError
 from models import db, Account, AccountCategory, AccountTransaction, Payment, SupplierPayment, FbmCashDrawerEntry, DirectSale, GRN, GRNItem, Supplier, Client, Booking, PendingBill
-from tenancy import audit_log
+from utils.audit import audit_log
 
 # Module configuration
 MODULE_CONFIG = {
@@ -598,7 +598,7 @@ def add_account_category():
 
     db.session.add(AccountCategory(name=name, note=note or None))
     db.session.commit()
-    audit_log(current_user, g.tenant_id, 'account.category.create', f'name={name}')
+    audit_log(current_user, 'account.category.create', f'name={name}')
     flash('Account category created successfully.', 'success')
     return redirect(url_for('accounts.manage_accounts'))
 
@@ -683,7 +683,7 @@ def add_account():
             flash(f'Unable to add account: {exc}', 'danger')
             return redirect(url_for('accounts.add_account'))
 
-        audit_log(current_user, g.tenant_id, 'account.create', f'name={name}, category={category}, source_category={category_exists.name}, account_type={account_type}')
+        audit_log(current_user, 'account.create', f'name={name}, category={category}, source_category={category_exists.name}, account_type={account_type}')
         flash('Account added successfully!', 'success')
         return redirect(url_for('accounts.manage_accounts'))
 
@@ -868,7 +868,7 @@ def void_transaction(tx_id):
                 sp.is_void = True
 
         db.session.commit()
-        audit_log(current_user, g.tenant_id, 'account.transaction.void',
+        audit_log(current_user, 'account.transaction.void',
                   f'tx_id={tx.id}, type={tx.transaction_type}, amount={tx.amount}, reason={reason}')
         flash('Transaction voided and balances corrected.', 'success')
     except Exception as exc:
@@ -974,7 +974,7 @@ def edit_account(account_id):
                 a.balance = new_balance
 
         db.session.commit()
-        audit_log(current_user, g.tenant_id, 'account.update', f'id={a.id}, name={a.name}')
+        audit_log(current_user, 'account.update', f'id={a.id}, name={a.name}')
         flash('Account updated successfully.', 'success')
     except ValueError as exc:
         db.session.rollback()
@@ -994,7 +994,7 @@ def toggle_account(account_id):
     a = Account.query.get_or_404(account_id)
     a.is_active = not bool(a.is_active)
     db.session.commit()
-    audit_log(current_user, g.tenant_id, 'account.toggle', f'id={a.id}, name={a.name}, active={a.is_active}')
+    audit_log(current_user, 'account.toggle', f'id={a.id}, name={a.name}, active={a.is_active}')
     flash(f'Account {"reactivated" if a.is_active else "deactivated"}.', 'success')
     return redirect(url_for('accounts.manage_accounts'))
 
@@ -1127,7 +1127,7 @@ def add_transaction():
                     db.session.add(discount_tx)
 
                 _apply_payment_to_pending_bills(client, amount, discount)
-                audit_log(current_user, g.tenant_id, 'account.transaction.receive', f'source_category=client_ledger, client={client.name}, account={receive_account.name}, amount={amount}, discount={discount}')
+                audit_log(current_user, 'account.transaction.receive', f'source_category=client_ledger, client={client.name}, account={receive_account.name}, amount={amount}, discount={discount}')
 
             elif receive_from_category == 'other_source':
                 if not receive_source_label:
@@ -1143,7 +1143,7 @@ def add_transaction():
                     date_posted=tx_date
                 )
                 db.session.add(account_tx)
-                audit_log(current_user, g.tenant_id, 'account.transaction.receive', f'source_category=other_source, source={receive_source_label}, to={receive_account.name}, amount={amount}')
+                audit_log(current_user, 'account.transaction.receive', f'source_category=other_source, source={receive_source_label}, to={receive_account.name}, amount={amount}')
 
             else:
                 category_exists = AccountCategory.query.filter(
@@ -1174,7 +1174,7 @@ def add_transaction():
                     date_posted=tx_date
                 )
                 db.session.add(account_tx)
-                audit_log(current_user, g.tenant_id, 'account.transaction.receive', f'source_category={category_exists.name}, from={from_account.name}, to={receive_account.name}, amount={amount}')
+                audit_log(current_user, 'account.transaction.receive', f'source_category={category_exists.name}, from={from_account.name}, to={receive_account.name}, amount={amount}')
 
             db.session.commit()
             flash('Receive transaction recorded successfully.', 'success')
@@ -1215,7 +1215,7 @@ def add_transaction():
                     date_posted=tx_date
                 )
                 db.session.add(tx)
-                audit_log(current_user, g.tenant_id, 'account.transaction.transfer', f'from={from_account.name}, to={to_account.name}, amount={amount}')
+                audit_log(current_user, 'account.transaction.transfer', f'from={from_account.name}, to={to_account.name}, amount={amount}')
                 flash('Transfer transaction recorded successfully.', 'success')
 
             elif pay_target == 'supplier':
@@ -1252,7 +1252,7 @@ def add_transaction():
                     date_posted=tx_date
                 )
                 db.session.add(tx)
-                audit_log(current_user, g.tenant_id, 'account.transaction.supplier_payment', f'from={from_account.name}, supplier={supplier.name}, amount={amount}')
+                audit_log(current_user, 'account.transaction.supplier_payment', f'from={from_account.name}, supplier={supplier.name}, amount={amount}')
                 flash('Supplier payment recorded successfully.', 'success')
 
             else:
@@ -1276,7 +1276,7 @@ def add_transaction():
                     date_posted=tx_date
                 )
                 db.session.add(tx)
-                audit_log(current_user, g.tenant_id, 'account.transaction.pay', f'from={from_account.name}, target={target_label}, amount={amount}')
+                audit_log(current_user, 'account.transaction.pay', f'from={from_account.name}, target={target_label}, amount={amount}')
                 flash('Outgoing payment recorded successfully.', 'success')
 
             db.session.commit()
@@ -1325,7 +1325,7 @@ def add_transfer():
                 db.session.add(transaction)
                 db.session.commit()
                 
-                audit_log(current_user, g.tenant_id, 'account.transfer', f'from={from_account.name}, to={to_account.name}, amount={amount}')
+                audit_log(current_user, 'account.transfer', f'from={from_account.name}, to={to_account.name}, amount={amount}')
                 flash('Transfer completed successfully!', 'success')
             else:
                 flash('Insufficient balance or invalid accounts!', 'danger')

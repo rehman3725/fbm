@@ -10,7 +10,7 @@ import shutil
 import zipfile
 import urllib.request
 import urllib.error
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, Response, make_response, send_from_directory, got_request_exception
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, Response, make_response, send_from_directory, got_request_exception, abort
 from flask import session
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 import re
@@ -29,8 +29,8 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, case, text, or_, and_, exists, not_
 from sqlalchemy.orm import selectinload
 from types import SimpleNamespace
-from models import db, Tenant, TenantFeature, AuditLog, User, Client, Material, MaterialCategory, Entry, PendingBill, Booking, BookingItem, Payment, FbmCashDrawerEntry, FbmCashDrawerCategory, WaiveOff, RootRecoveryCode, Invoice, BillCounter, DirectSale, DirectSaleItem, DirectSaleDraft, MaterialReturn, MaterialReturnItem, GRN, GRNItem, Delivery, DeliveryItem, Settings, ReconBasket, StaffEmail, FollowUpReminder, FollowUpContact, DeliveryPerson, DeliveryRent, SaleDeliveryPerson, DeliveryPersonPayment, Supplier, SupplierPayment, TenantWipeBackupHistory, RootBackupSettings, RootBackupEmailHistory, Account, AccountTransaction, get_or_create_material_category
-from tenancy import init_tenancy, bootstrap_tenancy, require_root, audit_log, ensure_user_table_tenant_unique, ensure_material_table_tenant_unique, ensure_client_table_tenant_unique, hard_delete_tenant, can_hard_delete_tenant, TEST_TENANT_NAME, DEFAULT_TENANT_NAME
+from models import db, AuditLog, User, Client, Material, MaterialCategory, Entry, PendingBill, Booking, BookingItem, Payment, FbmCashDrawerEntry, FbmCashDrawerCategory, WaiveOff, RootRecoveryCode, Invoice, BillCounter, DirectSale, DirectSaleItem, DirectSaleDraft, MaterialReturn, MaterialReturnItem, GRN, GRNItem, Delivery, DeliveryItem, Settings, ReconBasket, StaffEmail, FollowUpReminder, FollowUpContact, DeliveryPerson, DeliveryRent, SaleDeliveryPerson, DeliveryPersonPayment, Supplier, SupplierPayment, RootBackupSettings, RootBackupEmailHistory, Account, AccountTransaction, get_or_create_material_category
+from utils.audit import audit_log
 from utils.module_loader import load_modules
 from utils.reconciliation import run_auto_reconcile
 
@@ -54,6 +54,14 @@ def allow_iframe_and_cors(response):
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
     return response
+
+
+def require_root():
+    """
+    Multi-tenant/root features are disabled in single-store mode.
+    Keep this guard to avoid exposing legacy endpoints.
+    """
+    abort(404)
 
 
 @app.before_request
@@ -118,6 +126,25 @@ def pk_now():
 def pk_today():
     """Current Pakistan local date for app-wide date defaults."""
     return pk_now().date()
+
+
+def _db_debug_counts():
+    """Lightweight counts for verifying which DB file is loaded."""
+    counts = {}
+    try:
+        counts['client_total'] = int(db.session.execute(text("SELECT COUNT(*) FROM client")).scalar() or 0)
+    except Exception:
+        pass
+    try:
+        counts['client_active'] = int(db.session.execute(text("SELECT COUNT(*) FROM client WHERE COALESCE(is_active, 1)=1")).scalar() or 0)
+    except Exception:
+        pass
+    for t in ['direct_sale', 'booking', 'pending_bill', 'entry', 'payment']:
+        try:
+            counts[t] = int(db.session.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar() or 0)
+        except Exception:
+            continue
+    return counts
 
 
 def resolve_posted_datetime(date_str=None, fallback_dt=None):
@@ -302,9 +329,9 @@ app.config['MAX_CONTENT_LENGTH'] = _max_upload_mb * 1024 * 1024
 # Use environment variable for secret key or generate a secure one
 app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 
-# Backup policy: default to OFF (user-managed manual backups only).
-_AUTO_BACKUP_ENABLED = os.environ.get('AUTO_BACKUP_ENABLED', '0').strip() == '1'
-_WIPE_BACKUP_ENABLED = os.environ.get('WIPE_BACKUP_ENABLED', '0').strip() == '1'
+# Backup policy: disabled in single-store mode (never auto-create backup files).
+_AUTO_BACKUP_ENABLED = False
+_WIPE_BACKUP_ENABLED = False
 # Auto reconciliation: keep derived totals synced to ledgers.
 _AUTO_RECONCILE_ENABLED = os.environ.get('AUTO_RECONCILE_ENABLED', '1').strip() != '0'
 _AUTO_RECONCILE_FIX = os.environ.get('AUTO_RECONCILE_FIX', '1').strip() != '0'
@@ -340,7 +367,6 @@ def _protect_against_csrf():
 login_manager = LoginManager()
 login_manager.login_view = 'login'
 login_manager.init_app(app)
-init_tenancy(app)
 
 # Configure logging
 _root_logger = logging.getLogger()
@@ -398,7 +424,6 @@ def _guard_db_file_before_bootstrap():
 
 def _collect_health_counts():
     return {
-        'tenant': db.session.query(func.count(Tenant.id)).scalar() or 0,
         'user': db.session.query(func.count(User.id)).scalar() or 0,
         'client': db.session.query(func.count(Client.id)).scalar() or 0,
         'booking': db.session.query(func.count(Booking.id)).scalar() or 0,
@@ -468,6 +493,9 @@ def _db_health_check_after_bootstrap():
                     )
 
         for key, prev_val in prev_counts.items():
+            if key not in counts:
+                # Health counters can change between app versions (e.g., single-store removes tenant tracking).
+                continue
             now_val = counts.get(key, 0)
             if prev_val and now_val < prev_val:
                 drop = prev_val - now_val
@@ -707,7 +735,6 @@ def _build_root_backup_zip(settings_row):
 
         meta = {
             'generated_at': now.strftime('%Y-%m-%d %H:%M:%S'),
-            'tenant_count': Tenant.query.count(),
             'db_source_path': db_path,
         }
         zf.writestr('backup_meta.json', json.dumps(meta, ensure_ascii=True, indent=2))
@@ -771,9 +798,9 @@ def _send_hourly_all_tenants_backup_email(trigger_type='auto-hourly', force_send
         subject_prefix = (settings_row.subject_prefix or 'PWARE Root Backup').strip()
         subject = f"{subject_prefix} - {ts}"
         body = (
-            "Attached is the root automatic backup ZIP for all tenants.\n"
+            "Attached is the automatic backup ZIP.\n"
             f"Generated at: {pk_now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"Tenant count: {Tenant.query.count()}"
+            f"DB source: {db_path}"
         )
         ok, msg = _smtp_send_attachments_to(
             recipients,
@@ -1125,7 +1152,7 @@ def _next_material_code_for_category(category, material_name=''):
 
 def _get_default_material_category_id():
     try:
-        cat = get_or_create_material_category(current_user.tenant_id, 'General')
+        cat = get_or_create_material_category('General')
         return cat.id if cat else None
     except Exception:
         return None
@@ -1392,23 +1419,12 @@ def _ensure_model_columns():
 
 def _ensure_material_categories():
     try:
-        tenant_ids = [r[0] for r in db.session.query(Material.tenant_id).distinct().all()]
-        if not tenant_ids:
+        default_cat = get_or_create_material_category('General')
+        if not default_cat:
             return
-        for tenant_id in tenant_ids:
-            default_cat = get_or_create_material_category(tenant_id, 'General')
-            if tenant_id is None:
-                mats = Material.query.filter(Material.tenant_id.is_(None), Material.category_id.is_(None)).all()
-                assigned = Material.query.filter(Material.tenant_id.is_(None), Material.category_id.isnot(None)).all()
-            else:
-                mats = Material.query.filter(Material.tenant_id == tenant_id, Material.category_id.is_(None)).all()
-                assigned = Material.query.filter(Material.tenant_id == tenant_id, Material.category_id.isnot(None)).all()
-            for m in mats:
-                m.category_id = default_cat.id
-            valid_ids = {c.id for c in MaterialCategory.query.filter_by(tenant_id=tenant_id).all()}
-            for m in assigned:
-                if m.category_id not in valid_ids:
-                    m.category_id = default_cat.id
+        mats = Material.query.filter(Material.category_id.is_(None)).all()
+        for m in mats:
+            m.category_id = default_cat.id
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -1455,7 +1471,6 @@ def _ensure_waive_off_table():
         db.session.execute(text("""
             CREATE TABLE IF NOT EXISTS waive_off (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tenant_id VARCHAR(36),
                 payment_id INTEGER,
                 client_code VARCHAR(50),
                 client_name VARCHAR(100),
@@ -1477,7 +1492,6 @@ def _ensure_delivery_person_payments_table():
         db.session.execute(text("""
             CREATE TABLE IF NOT EXISTS delivery_person_payment (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tenant_id VARCHAR(36),
                 delivery_person_id INTEGER NOT NULL,
                 sale_id INTEGER,
                 allocation_id INTEGER,
@@ -1488,9 +1502,6 @@ def _ensure_delivery_person_payments_table():
                 created_by VARCHAR(80),
                 is_void INTEGER DEFAULT 0
             )
-        """))
-        db.session.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_dpp_tenant ON delivery_person_payment (tenant_id)
         """))
         db.session.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_dpp_person ON delivery_person_payment (delivery_person_id)
@@ -1662,6 +1673,10 @@ def _bootstrap_database():
         bootstrap_tenancy()
     except Exception:
         db.session.rollback()
+    try:
+        logging.getLogger('app').info('DB loaded: %s | counts=%s', db_path, _db_debug_counts())
+    except Exception:
+        pass
 
 def get_client_by_input(input_str):
     """Helper to find client by name, code, or mixed string."""
@@ -1727,7 +1742,7 @@ def _client_waive_off_total(client_name_norm, cutoff_dt=None):
     waive_q = waive_q.filter(
         or_(
             WaiveOff.payment_id.is_(None),
-            exists().where(and_(Payment.id == WaiveOff.payment_id, Payment.tenant_id == WaiveOff.tenant_id))
+            exists().where(Payment.id == WaiveOff.payment_id)
         )
     )
     if cutoff_dt:
@@ -10733,7 +10748,7 @@ def profit_reports():
     waive_query = waive_query.filter(
         or_(
             WaiveOff.payment_id.is_(None),
-            exists().where(and_(Payment.id == WaiveOff.payment_id, Payment.tenant_id == WaiveOff.tenant_id))
+            exists().where(Payment.id == WaiveOff.payment_id)
         )
     )
     if resolved_client:
@@ -11733,20 +11748,12 @@ def login():
         username = (request.form.get('username') or '').strip()
         password = str(request.form.get('password') or '')
         remember = (request.form.get('remember_me') or '').lower() in ('1', 'true', 'on', 'yes')
-        default_tenant = Tenant.query.filter_by(name=DEFAULT_TENANT_NAME).first()
-        default_tenant_id = default_tenant.id if default_tenant else None
-        user = None
-
-        if default_tenant_id:
-            user = User.query.filter_by(username=username, tenant_id=default_tenant_id).first()
-        if not user:
-            user = User.query.filter_by(username=username).order_by(User.id.asc()).first()
+        user = User.query.filter_by(username=username).order_by(User.id.asc()).first()
         if user and user.password_hash and check_password_hash(user.password_hash, password):
             if user.status != 'active':
                 flash('Account suspended', 'danger')
                 return render_template('login.html')
             login_user(user, remember=remember)
-            session['tenant_id'] = user.tenant_id
             session['role'] = user.role
             next_url = request.args.get('next')
             return redirect(next_url or url_for('index'))
@@ -11756,6 +11763,7 @@ def login():
 
 @app.route('/root/recovery', methods=['GET', 'POST'])
 def root_recovery():
+    require_root()
     root_username = os.environ.get('ROOT_USERNAME', 'root')
     if request.method == 'POST':
         username = (request.form.get('username') or '').strip()
@@ -11776,7 +11784,7 @@ def root_recovery():
             flash('Password confirmation does not match.', 'danger')
             return render_template('root_recovery.html', root_username=root_username)
 
-        root_user = User.query.filter_by(username=root_username, tenant_id=None).first()
+        root_user = User.query.filter_by(username=root_username).first()
         if not root_user:
             flash('Root account not found.', 'danger')
             return render_template('root_recovery.html', root_username=root_username)
@@ -11839,10 +11847,28 @@ def root_recovery_codes():
 @login_required
 def logout():
     logout_user()
-    session.pop('tenant_id', None)
     session.pop('role', None)
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
+
+
+@app.route('/debug/db')
+@login_required
+def debug_db():
+    if getattr(current_user, 'role', None) != 'admin':
+        abort(403)
+    try:
+        st = os.stat(db_path) if os.path.exists(db_path) else None
+        info = {
+            'db_path': db_path,
+            'db_exists': os.path.exists(db_path),
+            'db_size_bytes': (st.st_size if st else None),
+            'db_mtime': (datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M:%S') if st else None),
+            'counts': _db_debug_counts(),
+        }
+    except Exception as exc:
+        info = {'error': str(exc)}
+    return jsonify(info)
 
 
 # ==================== CLIENT ROUTES ====================
@@ -11903,7 +11929,6 @@ def clients():
 @app.route('/add_client', methods=['POST'])
 @login_required
 def add_client():
-    ensure_client_table_tenant_unique()
     name = request.form.get('name', '').strip()
     code = request.form.get('code', '').strip()
     if not name:
@@ -11963,33 +11988,33 @@ def edit_client(id):
             return redirect(url_for('clients'))
 
         if old_code != new_code or old_name != new_name:
-            PendingBill.query.filter_by(tenant_id=current_user.tenant_id, client_code=old_code).update({
+            PendingBill.query.filter_by(client_code=old_code).update({
                 'client_code': new_code,
                 'client_name': new_name
             })
-            Entry.query.filter_by(tenant_id=current_user.tenant_id, client_code=old_code).update({
+            Entry.query.filter_by(client_code=old_code).update({
                 'client_code': new_code,
                 'client': new_name
             })
-            Entry.query.filter_by(tenant_id=current_user.tenant_id, client=old_name).update({'client': new_name})
+            Entry.query.filter_by(client=old_name).update({'client': new_name})
 
             # Propagate name change to all related tables to prevent broken links
-            Booking.query.filter_by(tenant_id=current_user.tenant_id, client_name=old_name).update({'client_name': new_name})
-            DirectSale.query.filter_by(tenant_id=current_user.tenant_id, client_name=old_name).update({'client_name': new_name})
-            Payment.query.filter_by(tenant_id=current_user.tenant_id, client_name=old_name).update({'client_name': new_name})
-            WaiveOff.query.filter_by(tenant_id=current_user.tenant_id, client_name=old_name).update({
+            Booking.query.filter_by(client_name=old_name).update({'client_name': new_name})
+            DirectSale.query.filter_by(client_name=old_name).update({'client_name': new_name})
+            Payment.query.filter_by(client_name=old_name).update({'client_name': new_name})
+            WaiveOff.query.filter_by(client_name=old_name).update({
                 'client_name': new_name,
                 'client_code': new_code
             })
-            Invoice.query.filter_by(tenant_id=current_user.tenant_id, client_name=old_name).update({'client_name': new_name})
-            Invoice.query.filter_by(tenant_id=current_user.tenant_id, client_code=old_code).update({'client_code': new_code})
+            Invoice.query.filter_by(client_name=old_name).update({'client_name': new_name})
+            Invoice.query.filter_by(client_code=old_code).update({'client_code': new_code})
             
             # CRITICAL FIX: Update orphaned tables that were previously being skipped
             # See CLIENT_ORPHANING_FIX_PLAN.md for context on this data integrity issue
-            MaterialReturn.query.filter_by(tenant_id=current_user.tenant_id, client_name=old_name).update({'client_name': new_name})
-            Delivery.query.filter_by(tenant_id=current_user.tenant_id, client_name=old_name).update({'client_name': new_name})
-            DirectSaleDraft.query.filter_by(tenant_id=current_user.tenant_id, client_name=old_name).update({'client_name': new_name})
-            DirectSaleDraft.query.filter_by(tenant_id=current_user.tenant_id, client_code=old_code).update({'client_code': new_code})
+            MaterialReturn.query.filter_by(client_name=old_name).update({'client_name': new_name})
+            Delivery.query.filter_by(client_name=old_name).update({'client_name': new_name})
+            DirectSaleDraft.query.filter_by(client_name=old_name).update({'client_name': new_name})
+            DirectSaleDraft.query.filter_by(client_code=old_code).update({'client_code': new_code})
 
         page_entries_raw = request.form.getlist('page_entry')
         page_entries_clean = [str(x).strip() for x in page_entries_raw if str(x).strip()]
@@ -12088,15 +12113,15 @@ def transfer_client(id):
         flash('Cannot transfer to an inactive client', 'danger')
         return redirect(url_for('clients'))
 
-    entries_updated = Entry.query.filter_by(tenant_id=current_user.tenant_id, client_code=source_client.code).update({
+    entries_updated = Entry.query.filter_by(client_code=source_client.code).update({
         'client': target_client.name,
         'client_code': target_client.code
     })
-    bills_updated = PendingBill.query.filter_by(tenant_id=current_user.tenant_id, client_code=source_client.code).update({
+    bills_updated = PendingBill.query.filter_by(client_code=source_client.code).update({
         'client_name': target_client.name,
         'client_code': target_client.code
     })
-    waive_updated = WaiveOff.query.filter_by(tenant_id=current_user.tenant_id, client_code=source_client.code).update({
+    waive_updated = WaiveOff.query.filter_by(client_code=source_client.code).update({
         'client_name': target_client.name,
         'client_code': target_client.code
     })
@@ -12125,19 +12150,16 @@ def reclaim_client(id):
     source_client.is_active = True
 
     entries_reclaimed = Entry.query.filter_by(
-        tenant_id=current_user.tenant_id,
         client_code=target_client.code, client=target_client.name).update({
             'client': source_client.name,
             'client_code': source_client.code
         })
     bills_reclaimed = PendingBill.query.filter_by(
-        tenant_id=current_user.tenant_id,
         client_code=target_client.code, client_name=target_client.name).update({
             'client_name': source_client.name,
             'client_code': source_client.code
         })
     waive_reclaimed = WaiveOff.query.filter_by(
-        tenant_id=current_user.tenant_id,
         client_code=target_client.code, client_name=target_client.name).update({
             'client_name': source_client.name,
             'client_code': source_client.code
@@ -12298,8 +12320,8 @@ def api_material_next_code():
             category = db.session.get(MaterialCategory, int(category_id))
         except Exception:
             category = None
-    if not category or category.tenant_id != current_user.tenant_id:
-        category = get_or_create_material_category(current_user.tenant_id, 'General')
+    if not category:
+        category = get_or_create_material_category('General')
     code = _next_material_code_for_category(category, material_name=material_name)
     return jsonify({
         'success': True,
@@ -12662,7 +12684,6 @@ def merge_materials():
 @app.route('/add_material', methods=['POST'])
 @login_required
 def add_material():
-    ensure_material_table_tenant_unique()
     name = request.form.get('material_name', '').strip()
     code = request.form.get('material_code', '').strip()
     category_id = (request.form.get('category_id') or '').strip()
@@ -12682,8 +12703,8 @@ def add_material():
             category = db.session.get(MaterialCategory, int(category_id))
         except Exception:
             category = None
-    if not category or category.tenant_id != current_user.tenant_id:
-        category = get_or_create_material_category(current_user.tenant_id, 'General')
+    if not category:
+        category = get_or_create_material_category('General')
     if not code:
         code = _next_material_code_for_category(category, material_name=name)
     if Material.query.filter_by(code=code).first():
@@ -12734,7 +12755,7 @@ def edit_material(id):
                 cat = db.session.get(MaterialCategory, int(category_id))
             except Exception:
                 cat = None
-            if cat and cat.tenant_id == current_user.tenant_id:
+            if cat:
                 m.category_id = cat.id
         db.session.commit()
         flash('Brand Updated', 'info')
@@ -12775,13 +12796,13 @@ def add_material_category():
     if not name:
         flash('Category name is required', 'danger')
         return redirect(url_for('settings'))
-    existing = MaterialCategory.query.filter_by(tenant_id=current_user.tenant_id).filter(
+    existing = MaterialCategory.query.filter(
         func.lower(func.trim(MaterialCategory.name)) == name.lower()
     ).first()
     if existing:
         flash('Category already exists', 'danger')
         return redirect(url_for('settings'))
-    db.session.add(MaterialCategory(tenant_id=current_user.tenant_id, name=name, is_active=True))
+    db.session.add(MaterialCategory(name=name, is_active=True))
     db.session.commit()
     flash('Category added', 'success')
     return redirect(url_for('settings'))
@@ -12798,13 +12819,13 @@ def rename_material_category(id):
         flash('Category name is required', 'danger')
         return redirect(url_for('settings'))
     cat = db.session.get(MaterialCategory, id)
-    if not cat or cat.tenant_id != current_user.tenant_id:
+    if not cat:
         flash('Category not found', 'danger')
         return redirect(url_for('settings'))
     if cat.name.lower() == 'general' and name.lower() != 'general':
         flash('Default category cannot be renamed', 'danger')
         return redirect(url_for('settings'))
-    existing = MaterialCategory.query.filter_by(tenant_id=current_user.tenant_id).filter(
+    existing = MaterialCategory.query.filter(
         func.lower(func.trim(MaterialCategory.name)) == name.lower()
     ).first()
     if existing and existing.id != cat.id:
@@ -12823,7 +12844,7 @@ def toggle_material_category(id):
         flash('Unauthorized', 'danger')
         return redirect(url_for('settings'))
     cat = db.session.get(MaterialCategory, id)
-    if not cat or cat.tenant_id != current_user.tenant_id:
+    if not cat:
         flash('Category not found', 'danger')
         return redirect(url_for('settings'))
     if cat.name.lower() == 'general' and cat.is_active:
@@ -14871,7 +14892,6 @@ def tenants_dashboard():
 @login_required
 def tenants_create():
     require_root()
-    ensure_user_table_tenant_unique()
     name = (request.form.get('name') or '').strip()
     status = (request.form.get('status') or 'active').strip()
     subscription_plan = (request.form.get('subscription_plan') or '').strip()
@@ -15292,7 +15312,7 @@ def add_user():
     if not un:
         flash('Username is required', 'danger')
         return redirect(url_for('settings'))
-    if User.query.filter_by(username=un, tenant_id=current_user.tenant_id).first():
+    if User.query.filter_by(username=un).first():
         flash('Username already exists', 'danger')
     else:
         permission_values = _permissions_from_request_form()
@@ -15730,6 +15750,8 @@ def _enforce_tenant_wipe_backup_retention(tenant_id, keep=3):
 @app.route('/delete_selected_data', methods=['POST'])
 @login_required
 def delete_selected_data():
+    flash('Tenant wipe tools are disabled in single-store mode.', 'warning')
+    return redirect(url_for('settings'))
     if current_user.role not in ['admin', 'root']:
         flash('Only tenant admin or root can erase tenant data from settings.', 'danger')
         return redirect(url_for('index'))
@@ -15978,8 +16000,8 @@ def delete_selected_data():
 
         # Always clean orphan invoices to avoid hidden "bill already exists" residue.
         orphan_invoice_count = _tq(Invoice).filter(
-            ~exists().where(and_(DirectSale.invoice_id == Invoice.id, DirectSale.tenant_id == tenant_id)),
-            ~exists().where(and_(Entry.invoice_id == Invoice.id, Entry.tenant_id == tenant_id))
+            ~exists().where(DirectSale.invoice_id == Invoice.id),
+            ~exists().where(Entry.invoice_id == Invoice.id)
         ).delete(synchronize_session=False)
         if orphan_invoice_count:
             deleted_info.append(f'Orphan Invoices ({orphan_invoice_count})')

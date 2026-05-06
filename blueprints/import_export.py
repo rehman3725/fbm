@@ -20,7 +20,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import func, and_, or_, Date, DateTime, select, text
 from sqlalchemy.engine.url import make_url
 from email.message import EmailMessage
-from models import db, Tenant, User, Material, MaterialCategory, Entry, Client, PendingBill, Booking, BookingItem, Payment, DirectSale, DirectSaleItem, GRN, GRNItem, Delivery, DeliveryItem, DeliveryPerson, DeliveryRent, Invoice, Settings, BillCounter, StaffEmail, FbmCashDrawerEntry, FbmCashDrawerCategory, get_or_create_material_category
+from models import db, User, Material, MaterialCategory, Entry, Client, PendingBill, Booking, BookingItem, Payment, DirectSale, DirectSaleItem, GRN, GRNItem, Delivery, DeliveryItem, DeliveryPerson, DeliveryRent, Invoice, Settings, BillCounter, StaffEmail, FbmCashDrawerEntry, FbmCashDrawerCategory, get_or_create_material_category
 
 # Module configuration
 MODULE_CONFIG = {
@@ -46,8 +46,7 @@ FULL_RAW_EXCLUDE_TABLES = {
 
 @import_export_bp.before_request
 def _import_export_access_guard():
-    # Tenant admin can import/export tenant-scoped data.
-    # Only root can use app-upgrade endpoints.
+    # Single-store mode: admin-only.
     if not current_user.is_authenticated:
         return None
     role = getattr(current_user, 'role', None)
@@ -60,12 +59,12 @@ def _import_export_access_guard():
         'import_export.app_upgrade_rollback',
         'import_export.app_upgrade_migrate',
     }
-    if endpoint in root_only and role != 'root':
-        flash('Only root account can access App Upgrade operations.', 'danger')
+    if endpoint in root_only:
+        flash('App Upgrade operations are disabled in single-store mode.', 'warning')
         return redirect(url_for('index'))
 
-    if role not in ['admin', 'root']:
-        flash('Only tenant admin or root can access Import/Export operations.', 'danger')
+    if role != 'admin':
+        flash('Only admin can access Import/Export operations.', 'danger')
         return redirect(url_for('index'))
     return None
 
@@ -86,41 +85,25 @@ def _safe_name(value, fallback='unknown'):
 
 def _tenant_release_dir(kind='artifacts'):
     """
-    Store tenant import/export snapshots in release folders under DEPLOY_BASE_DIR.
+    Store import/export snapshots in release folders under DEPLOY_BASE_DIR.
     Layout:
-      <DEPLOY_BASE_DIR>/tenant_data/<tenant-key>/<kind>/
+      <DEPLOY_BASE_DIR>/data/<kind>/
     """
     base_dir = current_app.config.get('DEPLOY_BASE_DIR') or os.path.join(os.path.expanduser('~'), 'releases')
-    role = _actor_role()
-    tenant_id = _actor_tenant_id()
     username = _actor_username()
-    if role == 'root':
-        tenant_key = 'root'
-    else:
-        tenant_key = f"tenant_{_safe_name(tenant_id, 'unknown')}_{_safe_name(username, 'admin')}"
-    path = os.path.join(base_dir, 'tenant_data', tenant_key, _safe_name(kind, 'artifacts'))
+    path = os.path.join(base_dir, 'data', _safe_name(username, 'admin'), _safe_name(kind, 'artifacts'))
     try:
         os.makedirs(path, exist_ok=True)
         return path
     except Exception:
-        fallback = os.path.join(current_app.instance_path, 'tenant_releases', tenant_key, _safe_name(kind, 'artifacts'))
+        fallback = os.path.join(current_app.instance_path, 'releases', _safe_name(username, 'admin'), _safe_name(kind, 'artifacts'))
         os.makedirs(fallback, exist_ok=True)
         return fallback
 
 
 def _archive_artifact_bytes(content, filename, kind='artifacts'):
-    try:
-        folder = _tenant_release_dir(kind=kind)
-        stamp = pk_now().strftime('%Y%m%d_%H%M%S')
-        safe_filename = _safe_name(filename, 'artifact.bin')
-        out_path = os.path.join(folder, f"{stamp}_{safe_filename}")
-        data = content.encode('utf-8') if isinstance(content, str) else content
-        with open(out_path, 'wb') as f:
-            f.write(data or b'')
-        return out_path
-    except Exception:
-        logging.exception('Archive artifact failed for %s', filename)
-        return None
+    # Single-store mode: never write artifacts (exports/imports/backups) to disk automatically.
+    return None
 
 
 # --- Constants & Schemas ---
@@ -236,28 +219,8 @@ def generate_client_code():
     return f"{prefix}{(max_num + 1):05d}"
 
 def backup_database():
-    """Creates a timestamped backup of the database before import."""
-    try:
-        role = _actor_role()
-        timestamp = pk_now().strftime('%Y%m%d_%H%M%S')
-        if role == 'root':
-            db_path = current_app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
-            if os.path.exists(db_path):
-                backup_dir = _tenant_release_dir(kind='backups')
-                backup_path = os.path.join(backup_dir, f"ahmed_cement_backup_{timestamp}.db")
-                shutil.copy2(db_path, backup_path)
-                return True, f"Backup created: {os.path.basename(backup_path)}"
-        else:
-            # Tenant-safe backup: only tenant-scoped export snapshot, not full DB copy.
-            content = _build_master_export_bytes()
-            backup_dir = _tenant_release_dir(kind='backups')
-            backup_path = os.path.join(backup_dir, f"tenant_scope_backup_{timestamp}.xlsx")
-            with open(backup_path, 'wb') as f:
-                f.write(content)
-            return True, f"Tenant backup created: {os.path.basename(backup_path)}"
-    except Exception as e:
-        return False, str(e)
-    return False, "Database file not found"
+    """Single-store: backups are disabled (no files are written)."""
+    return True, "Backup skipped (disabled in single-store mode)"
 
 def _record_discrepancy(report, msg):
     if 'discrepancies' not in report:
@@ -290,12 +253,8 @@ def _actor_username():
 
 
 def _actor_tenant_id():
-    try:
-        if getattr(current_user, 'is_authenticated', False):
-            return current_user.tenant_id
-    except Exception:
-        pass
-    return getattr(_IMPORT_ACTOR_CTX, 'tenant_id', None)
+    # Single-store mode: no tenant scoping
+    return None
 
 
 def _actor_role():
@@ -312,73 +271,26 @@ def _actor_role():
     return getattr(_IMPORT_ACTOR_CTX, 'role', None)
 
 def _resolve_scope_context(scope_raw=None, tenant_id_raw=None):
-    """
-    Determine import/export scope.
-    - admin: forced to own tenant
-    - root: supports all_tenants or a single tenant scope
-    """
+    """Single-store: always operate on full dataset."""
     role = _actor_role()
-    actor_tenant_id = _actor_tenant_id()
-    if role != 'root':
-        if not actor_tenant_id:
-            raise ValueError('Tenant admin account is not linked to a tenant.')
-        tenant = Tenant.query.filter_by(id=actor_tenant_id).first()
-        return {
-            'scope': 'tenant',
-            'target_tenant_id': actor_tenant_id,
-            'target_tenant_name': tenant.name if tenant else None,
-            'role': role,
-        }
-
-    scope = str(scope_raw or 'all_tenants').strip().lower()
-    if scope != 'tenant':
-        return {
-            'scope': 'all_tenants',
-            'target_tenant_id': None,
-            'target_tenant_name': 'All Tenants',
-            'role': role,
-        }
-
-    target_tenant_id = str(tenant_id_raw or '').strip()
-    if not target_tenant_id:
-        raise ValueError('Select a tenant for tenant-scoped import/export.')
-    tenant = Tenant.query.filter_by(id=target_tenant_id).first()
-    if not tenant:
-        raise ValueError('Selected tenant was not found.')
     return {
-        'scope': 'tenant',
-        'target_tenant_id': target_tenant_id,
-        'target_tenant_name': tenant.name,
+        'scope': 'single_store',
+        'target_tenant_id': None,
+        'target_tenant_name': None,
         'role': role,
     }
 
 def _default_scope_context():
-    scope_raw = None
-    tenant_id_raw = None
-    try:
-        scope_raw = request.args.get('scope')
-        tenant_id_raw = request.args.get('tenant_id')
-    except Exception:
-        scope_raw = None
-        tenant_id_raw = None
-    return _resolve_scope_context(scope_raw=scope_raw, tenant_id_raw=tenant_id_raw)
+    return _resolve_scope_context(scope_raw=None, tenant_id_raw=None)
 
 def _full_raw_tables_for_scope(scope_ctx):
-    if scope_ctx.get('scope') == 'all_tenants':
-        return [t for t in db.metadata.sorted_tables if t.name not in FULL_RAW_EXCLUDE_TABLES]
-    return [t for t in db.metadata.sorted_tables if 'tenant_id' in t.c and t.name not in FULL_RAW_EXCLUDE_TABLES]
+    return [t for t in db.metadata.sorted_tables if t.name not in FULL_RAW_EXCLUDE_TABLES]
 
 def _scope_table_select(table, scope_ctx):
-    if scope_ctx.get('scope') == 'all_tenants':
-        return table.select()
-    if 'tenant_id' not in table.c:
-        return None
-    return table.select().where(table.c.tenant_id == scope_ctx.get('target_tenant_id'))
+    return table.select()
 
 def _scoped_model_query(model, scope_ctx):
     q = model.query
-    if scope_ctx.get('scope') == 'tenant' and hasattr(model, 'tenant_id'):
-        q = q.filter(model.tenant_id == scope_ctx.get('target_tenant_id'))
     return q
 
 def _sqlite_db_file_path():
@@ -429,7 +341,7 @@ def _download_filename(section, ext='xlsx', dt=None):
 
 def _default_material_category_id():
     try:
-        cat = get_or_create_material_category(_actor_tenant_id(), 'General')
+        cat = get_or_create_material_category('General')
         return cat.id if cat else None
     except Exception:
         return None
@@ -529,8 +441,6 @@ def import_export_page():
     else:
         full_raw_import_report = None
     tenants = []
-    if getattr(current_user, 'role', None) == 'root':
-        tenants = Tenant.query.order_by(Tenant.name.asc()).all()
     return render_template(
         'import_export_new.html',
         full_raw_import_enabled=full_raw_import_enabled,
@@ -2049,6 +1959,8 @@ def _get_sqlite_db_path():
 
 
 def _snapshot_sqlite_db(stamp, backup_dir=None):
+    # Single-store mode: never snapshot/copy DB files automatically.
+    return None
     db_path = _get_sqlite_db_path()
     if not db_path or not os.path.exists(db_path):
         return None
@@ -2084,7 +1996,6 @@ def _restore_sqlite_snapshot(snap):
 
 def _capture_guard_counts():
     return {
-        'tenant': int(Tenant.query.count()),
         'user': int(User.query.count()),
         'client': int(Client.query.count()),
         'material': int(Material.query.count()),
@@ -2452,6 +2363,8 @@ def _deploy_release_worker(
 
 
 def _create_full_raw_backup(backup_dir=None):
+    # Single-store mode: never write backup artifacts automatically.
+    return None
     backup_dir = backup_dir or os.path.join(current_app.instance_path, 'full_raw_backups')
     os.makedirs(backup_dir, exist_ok=True)
     stamp = pk_now().strftime('%Y%m%d_%H%M%S')
@@ -2602,196 +2515,13 @@ def full_raw_export():
 @import_export_bp.route('/tenant_db_export')
 @login_required
 def tenant_db_export():
-    try:
-        scope_ctx = _resolve_scope_context(
-            scope_raw=request.args.get('scope'),
-            tenant_id_raw=request.args.get('tenant_id'),
-        )
-    except ValueError as e:
-        flash(str(e), 'danger')
-        return redirect(url_for('import_export.import_export_page'))
-
-    if scope_ctx.get('scope') != 'tenant':
-        flash('Tenant DB export requires tenant scope.', 'danger')
-        return redirect(url_for('import_export.import_export_page'))
-
-    src_db_path = _sqlite_db_file_path()
-    if not src_db_path or not os.path.exists(src_db_path):
-        flash('DB file export is available only on SQLite file-based deployments.', 'danger')
-        return redirect(url_for('settings'))
-
-    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
-    tmp_file.close()
-    tmp_path = tmp_file.name
-    try:
-        shutil.copy2(src_db_path, tmp_path)
-        tenant_id = scope_ctx.get('target_tenant_id')
-        with sqlite3.connect(tmp_path) as conn:
-            conn.execute('PRAGMA foreign_keys=OFF')
-            for table in reversed(list(db.metadata.sorted_tables)):
-                tname = table.name
-                if tname == 'tenant':
-                    conn.execute("DELETE FROM tenant WHERE id <> ?", (tenant_id,))
-                    continue
-                if 'tenant_id' in table.c:
-                    conn.execute(
-                        f"DELETE FROM {tname} WHERE tenant_id <> ? OR tenant_id IS NULL",
-                        (tenant_id,)
-                    )
-                else:
-                    conn.execute(f"DELETE FROM {tname}")
-            conn.commit()
-        with open(tmp_path, 'rb') as f:
-            content = f.read()
-    finally:
-        try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
-
-    fname = _download_filename('SQLITEBACKUP', 'db')
-    _archive_artifact_bytes(content, fname, kind='exports')
-    output = io.BytesIO(content)
-    output.seek(0)
-    return send_file(output, as_attachment=True, download_name=fname, mimetype='application/octet-stream')
+    return "Not Found", 404
 
 
 @import_export_bp.route('/tenant_db_restore', methods=['POST'])
 @login_required
 def tenant_db_restore():
-    try:
-        scope_ctx = _resolve_scope_context(
-            scope_raw=request.form.get('scope'),
-            tenant_id_raw=request.form.get('tenant_id'),
-        )
-    except ValueError as e:
-        flash(str(e), 'danger')
-        return redirect(url_for('settings'))
-
-    if scope_ctx.get('scope') != 'tenant':
-        flash('Tenant DB restore requires tenant scope.', 'danger')
-        return redirect(url_for('settings'))
-
-    file = request.files.get('file')
-    if not file:
-        flash('No DB backup file uploaded.', 'danger')
-        return redirect(url_for('settings'))
-    if not str(file.filename or '').lower().endswith('.db'):
-        flash('Please upload a .db backup file.', 'danger')
-        return redirect(url_for('settings'))
-
-    src_db_path = _sqlite_db_file_path()
-    if not src_db_path or not os.path.exists(src_db_path):
-        flash('DB file restore is available only on SQLite file-based deployments.', 'danger')
-        return redirect(url_for('settings'))
-
-    tenant_id = scope_ctx.get('target_tenant_id')
-    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
-    tmp_file.close()
-    tmp_path = tmp_file.name
-    try:
-        file_bytes = file.read()
-        with open(tmp_path, 'wb') as f:
-            f.write(file_bytes)
-        _archive_artifact_bytes(file_bytes, f"tenant_db_restore_{file.filename}", kind='imports')
-
-        with sqlite3.connect(tmp_path) as src_conn:
-            src_conn.row_factory = sqlite3.Row
-            src_tables = {
-                r[0] for r in src_conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-            }
-
-            tenant_tables = [t for t in db.metadata.sorted_tables if 'tenant_id' in t.c]
-            restore_stats = {
-                'inserted': 0,
-                'updated': 0,
-                'skipped_tenant_mismatch': 0,
-                'skipped_null_tenant': 0,
-                'skipped_root_user': 0,
-            }
-            # Replace target tenant dataset while preserving current admin login row.
-            for t in reversed(tenant_tables):
-                if (
-                    getattr(current_user, 'role', None) != 'root'
-                    and t.name == 'user'
-                    and getattr(current_user, 'username', None)
-                ):
-                    db.session.execute(
-                        t.delete().where(
-                            and_(t.c.tenant_id == tenant_id, t.c.username != current_user.username)
-                        )
-                    )
-                else:
-                    db.session.execute(t.delete().where(t.c.tenant_id == tenant_id))
-
-            for t in tenant_tables:
-                if t.name not in src_tables:
-                    continue
-                src_rows = src_conn.execute(f"SELECT * FROM {t.name}").fetchall()
-                for src_row in src_rows:
-                    if 'tenant_id' in src_row.keys():
-                        src_tid = src_row['tenant_id']
-                        if src_tid is None:
-                            restore_stats['skipped_null_tenant'] += 1
-                            continue
-                        if str(src_tid) != str(tenant_id):
-                            restore_stats['skipped_tenant_mismatch'] += 1
-                            continue
-                    payload = {}
-                    for col in t.columns:
-                        cname = col.name
-                        if cname not in src_row.keys():
-                            continue
-                        val = src_row[cname]
-                        if cname == 'tenant_id':
-                            val = tenant_id
-                        val = _normalize_sqlite_value_for_column(val, col)
-                        payload[cname] = val
-                    if not payload:
-                        continue
-                    if t.name == 'user':
-                        uname = str(payload.get('username') or '').strip()
-                        if uname.lower() == 'root':
-                            restore_stats['skipped_root_user'] += 1
-                            continue
-                        payload.pop('id', None)
-                        if (
-                            getattr(current_user, 'role', None) != 'root'
-                            and uname == getattr(current_user, 'username', None)
-                        ):
-                            payload.pop('password_hash', None)
-                            payload.pop('role', None)
-                            payload.pop('status', None)
-                        existing_user = db.session.execute(
-                            select(t).where(and_(t.c.tenant_id == tenant_id, t.c.username == uname)).limit(1)
-                        ).first()
-                        if existing_user:
-                            db.session.execute(
-                                t.update().where(and_(t.c.tenant_id == tenant_id, t.c.username == uname)).values(**payload)
-                            )
-                            restore_stats['updated'] += 1
-                            continue
-                    db.session.execute(t.insert().values(**payload))
-                    restore_stats['inserted'] += 1
-
-        db.session.commit()
-        flash(
-            'Tenant DB restore completed successfully. '
-            f"Inserted: {restore_stats['inserted']}, Updated: {restore_stats['updated']}, "
-            f"Skipped(other-tenant): {restore_stats['skipped_tenant_mismatch']}, "
-            f"Skipped(null-tenant): {restore_stats['skipped_null_tenant']}, "
-            f"Skipped(root-user): {restore_stats['skipped_root_user']}.",
-            'success'
-        )
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Tenant DB restore failed: {e}', 'danger')
-    finally:
-        try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
-    return redirect(url_for('settings'))
+    return "Not Found", 404
 
 
 def _run_full_raw_import_bytes(file_bytes, scope_ctx, mode, source_file_name):
@@ -2935,46 +2665,23 @@ def _run_full_raw_import_bytes(file_bytes, scope_ctx, mode, source_file_name):
             report['inserted'] += 1
 
     db.session.commit()
+    report_name = None
     if skipped_rows:
-        try:
-            report_dir = os.path.join(current_app.instance_path, 'import_reports')
-            os.makedirs(report_dir, exist_ok=True)
-            stamp = pk_now().strftime('%Y%m%d_%H%M%S')
-            report_name = f"full_raw_import_report_{stamp}.csv"
-            report_path = os.path.join(report_dir, report_name)
-            with open(report_path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(
-                    f,
-                    fieldnames=['table', 'reason', 'pk', 'label', 'row_json']
-                )
-                writer.writeheader()
-                writer.writerows(skipped_rows)
-            report_meta = {
-                'name': report_name,
-                'created_at': pk_now().strftime('%Y-%m-%d %H:%M:%S'),
-                'mode': mode,
-                'scope': scope_ctx.get('scope'),
-                'tenant_id': target_tenant_id if scope_ctx.get('scope') == 'tenant' else None,
-                'tenant_name': (
-                    scope_ctx.get('target_tenant_name')
-                    if scope_ctx.get('scope') == 'tenant'
-                    else 'All Tenants'
-                ),
-                'inserted': report['inserted'],
-                'skipped': report['skipped'],
-                'tables': report['tables'],
-                'source_file': source_file_name,
-            }
-            meta_path = report_path.replace('.csv', '.meta.json')
-            try:
-                with open(meta_path, 'w', encoding='utf-8') as f:
-                    json.dump(report_meta, f, ensure_ascii=True)
-            except Exception:
-                pass
-            session['full_raw_import_report'] = report_name
-            session['full_raw_import_report_meta'] = report_meta
-        except Exception:
-            logging.exception('Full raw import committed but report generation failed')
+        # Single-store mode: do not write import reports to disk.
+        report_name = f"full_raw_import_report_{pk_now().strftime('%Y%m%d_%H%M%S')}"
+        report_meta = {
+            'name': report_name,
+            'created_at': pk_now().strftime('%Y-%m-%d %H:%M:%S'),
+            'mode': mode,
+            'scope': scope_ctx.get('scope'),
+            'inserted': report['inserted'],
+            'skipped': report['skipped'],
+            'tables': report['tables'],
+            'source_file': source_file_name,
+            'skipped_rows_count': len(skipped_rows),
+        }
+        session['full_raw_import_report'] = report_name
+        session['full_raw_import_report_meta'] = report_meta
     return report, report_name
 
 
@@ -4185,4 +3892,5 @@ def import_master():
         return jsonify({'error': str(e)}), 500
     finally:
         _clear_import_actor_context()
-
+
+

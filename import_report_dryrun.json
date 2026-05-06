@@ -1,0 +1,17 @@
+{
+  "status": "FAILED",
+  "timestamp": "2026-05-06T09:46:10.758300",
+  "dry_run": true,
+  "operations": [
+    {
+      "action": "backup",
+      "details": "\u2713 Backed up target DB: instance\\ahmed_cement.db.backup"
+    }
+  ],
+  "statistics": {},
+  "errors": [
+    "no such table: account_category"
+  ],
+  "warnings": [],
+  "completed_at": "2026-05-06T09:46:16.468638"
+}

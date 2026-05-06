@@ -1,0 +1,290 @@
+{
+  "generated": "2026-05-06T09:52:56.234706",
+  "source_db": "DATA TO COPY\\SQLITEBACKUP-06-05-2026_08-40AM.db",
+  "target_db": "instance\\ahmed_cement.db",
+  "summary": {
+    "total_tables": 46,
+    "total_source_rows": 3873,
+    "total_target_rows": 3875,
+    "matching_tables": 44,
+    "tables_with_data": 20
+  },
+  "tables": [
+    {
+      "name": "audit_log",
+      "source_rows": 2,
+      "target_rows": 2,
+      "match": true
+    },
+    {
+      "name": "bill_counter",
+      "source_rows": 4,
+      "target_rows": 4,
+      "match": true
+    },
+    {
+      "name": "booking",
+      "source_rows": 124,
+      "target_rows": 124,
+      "match": true
+    },
+    {
+      "name": "booking_item",
+      "source_rows": 247,
+      "target_rows": 247,
+      "match": true
+    },
+    {
+      "name": "client",
+      "source_rows": 172,
+      "target_rows": 172,
+      "match": true
+    },
+    {
+      "name": "delivery",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "delivery_item",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "delivery_person",
+      "source_rows": 10,
+      "target_rows": 10,
+      "match": true
+    },
+    {
+      "name": "delivery_person_payment",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "delivery_rent",
+      "source_rows": 153,
+      "target_rows": 153,
+      "match": true
+    },
+    {
+      "name": "direct_sale",
+      "source_rows": 349,
+      "target_rows": 349,
+      "match": true
+    },
+    {
+      "name": "direct_sale_draft",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "direct_sale_item",
+      "source_rows": 601,
+      "target_rows": 601,
+      "match": true
+    },
+    {
+      "name": "entry",
+      "source_rows": 762,
+      "target_rows": 762,
+      "match": true
+    },
+    {
+      "name": "fbm_cash_drawer_category",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "fbm_cash_drawer_entry",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "follow_up_contact",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "follow_up_reminder",
+      "source_rows": 3,
+      "target_rows": 3,
+      "match": true
+    },
+    {
+      "name": "grn",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "grn_item",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "invoice",
+      "source_rows": 293,
+      "target_rows": 293,
+      "match": true
+    },
+    {
+      "name": "material",
+      "source_rows": 41,
+      "target_rows": 41,
+      "match": true
+    },
+    {
+      "name": "material_category",
+      "source_rows": 9,
+      "target_rows": 9,
+      "match": true
+    },
+    {
+      "name": "material_return",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "material_return_item",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "payment",
+      "source_rows": 152,
+      "target_rows": 152,
+      "match": true
+    },
+    {
+      "name": "pending_bill",
+      "source_rows": 521,
+      "target_rows": 521,
+      "match": true
+    },
+    {
+      "name": "permission",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "recon_basket",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "role",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "role_permission",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "root_backup_email_history",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "root_backup_settings",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "root_recovery_code",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "sale_delivery_persons",
+      "source_rows": 361,
+      "target_rows": 361,
+      "match": true
+    },
+    {
+      "name": "schema_version",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "settings",
+      "source_rows": 0,
+      "target_rows": 1,
+      "match": false
+    },
+    {
+      "name": "staff_email",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "supplier",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "supplier_payment",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "tenant",
+      "source_rows": 1,
+      "target_rows": 2,
+      "match": false
+    },
+    {
+      "name": "tenant_feature",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "tenant_wipe_backup_history",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "user",
+      "source_rows": 5,
+      "target_rows": 5,
+      "match": true
+    },
+    {
+      "name": "user_role",
+      "source_rows": 0,
+      "target_rows": 0,
+      "match": true
+    },
+    {
+      "name": "waive_off",
+      "source_rows": 63,
+      "target_rows": 63,
+      "match": true
+    }
+  ]
+}

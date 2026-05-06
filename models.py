@@ -18,35 +18,6 @@ def pk_model_now():
     return datetime.now(PK_TZ).replace(tzinfo=None)
 
 
-def _get_request_g():
-    try:
-        from flask import g
-        return g
-    except Exception:
-        return None
-
-
-def get_current_tenant_id():
-    g = _get_request_g()
-    if not g:
-        return None
-    return getattr(g, 'tenant_id', None)
-
-
-def get_enforce_tenant():
-    g = _get_request_g()
-    if not g:
-        return False
-    return bool(getattr(g, 'enforce_tenant', False))
-
-
-def is_root_context():
-    g = _get_request_g()
-    if not g:
-        return False
-    return bool(getattr(g, 'is_root', False))
-
-
 AUTO_BILL_NS_DEFAULT_MODEL = 'GEN'
 
 
@@ -134,60 +105,7 @@ def _parse_bill_kind_model(value):
     return 'UNKNOWN'
 
 
-class TenantScopedMixin:
-    tenant_id = db.Column(db.String(36), db.ForeignKey('tenant.id'), index=True, nullable=True)
-
-
-class Tenant(db.Model):
-    __tablename__ = 'tenant'
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = db.Column(db.String(120), unique=True, nullable=False)
-    status = db.Column(db.String(20), default='active')
-    subscription_plan = db.Column(db.String(50))
-    expiry_date = db.Column(db.Date)
-    db_uri = db.Column(db.String(500))
-    created_at = db.Column(db.DateTime, default=pk_model_now)
-    updated_at = db.Column(db.DateTime, default=pk_model_now, onupdate=pk_model_now)
-
-
-class Role(db.Model):
-    __tablename__ = 'role'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
-    scope = db.Column(db.String(20), default='tenant')
-
-
-class Permission(db.Model):
-    __tablename__ = 'permission'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), unique=True, nullable=False)
-    description = db.Column(db.String(200))
-
-
-class RolePermission(db.Model):
-    __tablename__ = 'role_permission'
-    id = db.Column(db.Integer, primary_key=True)
-    role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=False)
-    permission_id = db.Column(db.Integer, db.ForeignKey('permission.id'), nullable=False)
-
-
-class UserRole(db.Model):
-    __tablename__ = 'user_role'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=False)
-    tenant_id = db.Column(db.String(36), db.ForeignKey('tenant.id'), nullable=True)
-
-
-class TenantFeature(db.Model):
-    __tablename__ = 'tenant_feature'
-    id = db.Column(db.Integer, primary_key=True)
-    tenant_id = db.Column(db.String(36), db.ForeignKey('tenant.id'), nullable=False, index=True)
-    feature_name = db.Column(db.String(80), nullable=False)
-    enabled = db.Column(db.Boolean, default=True)
-
-
-class AuditLog(TenantScopedMixin, db.Model):
+class AuditLog(db.Model):
     __tablename__ = 'audit_log'
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = db.Column(db.Integer)
@@ -196,10 +114,7 @@ class AuditLog(TenantScopedMixin, db.Model):
     timestamp = db.Column(db.DateTime, default=pk_model_now, index=True)
 
 
-class User(UserMixin, TenantScopedMixin, db.Model):
-    __table_args__ = (
-        UniqueConstraint('tenant_id', 'username', name='uq_user_tenant_username'),
-    )
+class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), nullable=False)
     password_hash = db.Column(db.String(200))
@@ -231,13 +146,8 @@ class User(UserMixin, TenantScopedMixin, db.Model):
     restrict_backdated_edit = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=pk_model_now)
 
-    tenant = db.relationship('Tenant', backref=db.backref('users', lazy=True))
 
-
-class Client(TenantScopedMixin, db.Model):
-    __table_args__ = (
-        UniqueConstraint('tenant_id', 'code', name='uq_client_tenant_code'),
-    )
+class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(50), nullable=False)
     name = db.Column(db.String(100), nullable=False)
@@ -261,10 +171,7 @@ class Client(TenantScopedMixin, db.Model):
     created_at = db.Column(db.DateTime, default=pk_model_now, index=True)
 
 
-class Supplier(TenantScopedMixin, db.Model):
-    __table_args__ = (
-        UniqueConstraint('tenant_id', 'name', name='uq_supplier_tenant_name'),
-    )
+class Supplier(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(20))
@@ -275,7 +182,7 @@ class Supplier(TenantScopedMixin, db.Model):
     created_at = db.Column(db.DateTime, default=pk_model_now, index=True)
 
 
-class SupplierPayment(TenantScopedMixin, db.Model):
+class SupplierPayment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
     amount = db.Column(db.Float, default=0)
@@ -294,10 +201,7 @@ class SupplierPayment(TenantScopedMixin, db.Model):
     payment_account = db.relationship('Account', foreign_keys=[payment_account_id], backref='supplier_payments')
 
 
-class Material(TenantScopedMixin, db.Model):
-    __table_args__ = (
-        UniqueConstraint('tenant_id', 'code', name='uq_material_tenant_code'),
-    )
+class Material(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(50), nullable=False)
     name = db.Column(db.String(100), nullable=False)
@@ -311,7 +215,7 @@ class Material(TenantScopedMixin, db.Model):
     category = db.relationship('MaterialCategory', backref=db.backref('materials', lazy=True))
 
 
-class MaterialCategory(TenantScopedMixin, db.Model):
+class MaterialCategory(db.Model):
     __tablename__ = 'material_category'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -319,11 +223,11 @@ class MaterialCategory(TenantScopedMixin, db.Model):
     created_at = db.Column(db.DateTime, default=pk_model_now, index=True)
 
 
-def get_or_create_material_category(tenant_id, name='General'):
+def get_or_create_material_category(name='General'):
     target = (name or 'General').strip()
     if not target:
         target = 'General'
-    q = MaterialCategory.query.filter_by(tenant_id=tenant_id).filter(
+    q = MaterialCategory.query.filter(
         func.lower(func.trim(MaterialCategory.name)) == target.lower()
     )
     cat = q.first()
@@ -331,13 +235,13 @@ def get_or_create_material_category(tenant_id, name='General'):
         if not cat.is_active:
             cat.is_active = True
         return cat
-    cat = MaterialCategory(tenant_id=tenant_id, name=target, is_active=True)
+    cat = MaterialCategory(name=target, is_active=True)
     db.session.add(cat)
     db.session.flush()
     return cat
 
 
-class Entry(TenantScopedMixin, db.Model):
+class Entry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.String(20))
     time = db.Column(db.String(20))
@@ -361,7 +265,7 @@ class Entry(TenantScopedMixin, db.Model):
     is_alternate = db.Column(db.Boolean, default=False)
 
 
-class PendingBill(TenantScopedMixin, db.Model):
+class PendingBill(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     client_code = db.Column(db.String(50))
     client_name = db.Column(db.String(100))
@@ -382,7 +286,7 @@ class PendingBill(TenantScopedMixin, db.Model):
     risk_override = db.Column(db.String(20))
 
 
-class Booking(TenantScopedMixin, db.Model):
+class Booking(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     client_name = db.Column(db.String(100))
     amount = db.Column(db.Float, default=0)
@@ -399,7 +303,7 @@ class Booking(TenantScopedMixin, db.Model):
     discount_reason = db.Column(db.String(200))
 
 
-class BookingItem(TenantScopedMixin, db.Model):
+class BookingItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'), nullable=False)
     material_name = db.Column(db.String(100))
@@ -407,7 +311,7 @@ class BookingItem(TenantScopedMixin, db.Model):
     price_at_time = db.Column(db.Float, default=0)
 
 
-class Payment(TenantScopedMixin, db.Model):
+class Payment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     client_name = db.Column(db.String(100))
     amount = db.Column(db.Float, default=0)
@@ -429,7 +333,7 @@ class Payment(TenantScopedMixin, db.Model):
     payment_account = db.relationship('Account', foreign_keys=[payment_account_id], backref='client_payments')
 
 
-class FbmCashDrawerEntry(TenantScopedMixin, db.Model):
+class FbmCashDrawerEntry(db.Model):
     __tablename__ = 'fbm_cash_drawer_entry'
     id = db.Column(db.Integer, primary_key=True)
     entry_type = db.Column(db.String(10), default='out', index=True)  # in | out
@@ -443,7 +347,7 @@ class FbmCashDrawerEntry(TenantScopedMixin, db.Model):
     is_void = db.Column(db.Boolean, default=False, index=True)
 
 
-class FbmCashDrawerCategory(TenantScopedMixin, db.Model):
+class FbmCashDrawerCategory(db.Model):
     __tablename__ = 'fbm_cash_drawer_category'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, index=True)
@@ -451,7 +355,7 @@ class FbmCashDrawerCategory(TenantScopedMixin, db.Model):
     created_at = db.Column(db.DateTime, default=pk_model_now, index=True)
 
 
-class WaiveOff(TenantScopedMixin, db.Model):
+class WaiveOff(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     payment_id = db.Column(db.Integer, db.ForeignKey('payment.id'), nullable=True, index=True)
     client_code = db.Column(db.String(50), index=True)
@@ -467,7 +371,7 @@ class WaiveOff(TenantScopedMixin, db.Model):
     payment = db.relationship('Payment', backref=db.backref('waive_off_rows', lazy=True))
 
 
-class Invoice(TenantScopedMixin, db.Model):
+class Invoice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     client_code = db.Column(db.String(50))
     client_name = db.Column(db.String(100))
@@ -487,13 +391,13 @@ class Invoice(TenantScopedMixin, db.Model):
     direct_sales = db.relationship('DirectSale', backref='invoice', lazy=True)
 
 
-class BillCounter(TenantScopedMixin, db.Model):
+class BillCounter(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     namespace = db.Column(db.String(12), default='GEN', index=True, nullable=False)
     count = db.Column(db.Integer, default=1000)
 
 
-class DirectSale(TenantScopedMixin, db.Model):
+class DirectSale(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     client_name = db.Column(db.String(100))
     category = db.Column(db.String(50))
@@ -524,7 +428,7 @@ class DirectSale(TenantScopedMixin, db.Model):
     payment_account = db.relationship('Account', foreign_keys=[payment_account_id], backref='direct_sale_payments')
 
 
-class DirectSaleDraft(TenantScopedMixin, db.Model):
+class DirectSaleDraft(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     client_code = db.Column(db.String(50))
     client_name = db.Column(db.String(100))
@@ -541,7 +445,7 @@ class DirectSaleDraft(TenantScopedMixin, db.Model):
     updated_at = db.Column(db.DateTime, default=pk_model_now, index=True)
 
 
-class DeliveryPerson(TenantScopedMixin, db.Model):
+class DeliveryPerson(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     phone = db.Column(db.String(30))
@@ -549,7 +453,7 @@ class DeliveryPerson(TenantScopedMixin, db.Model):
     created_at = db.Column(db.DateTime, default=pk_model_now, index=True)
 
 
-class DeliveryRent(TenantScopedMixin, db.Model):
+class DeliveryRent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     sale_id = db.Column(db.Integer, db.ForeignKey('direct_sale.id'), nullable=True, index=True)
     delivery_person_name = db.Column(db.String(100), nullable=False, index=True)
@@ -563,7 +467,7 @@ class DeliveryRent(TenantScopedMixin, db.Model):
     sale = db.relationship('DirectSale', backref=db.backref('delivery_rents', lazy=True))
 
 
-class SaleDeliveryPerson(TenantScopedMixin, db.Model):
+class SaleDeliveryPerson(db.Model):
     __tablename__ = 'sale_delivery_persons'
     id = db.Column(db.Integer, primary_key=True)
     sale_id = db.Column(db.Integer, db.ForeignKey('direct_sale.id'), nullable=False, index=True)
@@ -577,7 +481,7 @@ class SaleDeliveryPerson(TenantScopedMixin, db.Model):
     delivery_person = db.relationship('DeliveryPerson')
 
 
-class DeliveryPersonPayment(TenantScopedMixin, db.Model):
+class DeliveryPersonPayment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     delivery_person_id = db.Column(db.Integer, db.ForeignKey('delivery_person.id'), nullable=False, index=True)
     sale_id = db.Column(db.Integer, db.ForeignKey('direct_sale.id'), nullable=True, index=True)
@@ -594,7 +498,7 @@ class DeliveryPersonPayment(TenantScopedMixin, db.Model):
     allocation = db.relationship('SaleDeliveryPerson')
 
 
-class DirectSaleItem(TenantScopedMixin, db.Model):
+class DirectSaleItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     sale_id = db.Column(db.Integer, db.ForeignKey('direct_sale.id'), nullable=False)
     product_name = db.Column(db.String(100))
@@ -605,7 +509,7 @@ class DirectSaleItem(TenantScopedMixin, db.Model):
     grn_item = db.relationship('GRNItem', backref='sale_items')
 
 
-class MaterialReturn(TenantScopedMixin, db.Model):
+class MaterialReturn(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     client_name = db.Column(db.String(100))
     return_type = db.Column(db.String(20), default='normal')  # normal | booked
@@ -621,7 +525,7 @@ class MaterialReturn(TenantScopedMixin, db.Model):
     payment = db.relationship('Payment')
 
 
-class MaterialReturnItem(TenantScopedMixin, db.Model):
+class MaterialReturnItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     material_return_id = db.Column(db.Integer, db.ForeignKey('material_return.id'), nullable=False, index=True)
     material_name = db.Column(db.String(100))
@@ -631,7 +535,7 @@ class MaterialReturnItem(TenantScopedMixin, db.Model):
     price_at_time = db.Column(db.Float, default=0)
 
 
-class GRN(TenantScopedMixin, db.Model):
+class GRN(db.Model):
     """Goods Receipt Note - for stock receiving"""
     id = db.Column(db.Integer, primary_key=True)
     supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=True)
@@ -665,7 +569,7 @@ class GRN(TenantScopedMixin, db.Model):
     note = db.Column(db.String(500))
 
 
-class GRNItem(TenantScopedMixin, db.Model):
+class GRNItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     grn_id = db.Column(db.Integer, db.ForeignKey('grn.id'), nullable=False)
     mat_name = db.Column(db.String(100))
@@ -674,7 +578,7 @@ class GRNItem(TenantScopedMixin, db.Model):
     is_void = db.Column(db.Boolean, default=False, index=True)
 
 
-class Delivery(TenantScopedMixin, db.Model):
+class Delivery(db.Model):
     """Delivery records for dispatching"""
     id = db.Column(db.Integer, primary_key=True)
     client_name = db.Column(db.String(100))
@@ -685,14 +589,14 @@ class Delivery(TenantScopedMixin, db.Model):
     items = db.relationship('DeliveryItem', backref='delivery', lazy=True, cascade='all, delete-orphan')
 
 
-class DeliveryItem(TenantScopedMixin, db.Model):
+class DeliveryItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     delivery_id = db.Column(db.Integer, db.ForeignKey('delivery.id'), nullable=False)
     product = db.Column(db.String(100))
     qty = db.Column(db.Float, default=0)
 
 
-class Settings(TenantScopedMixin, db.Model):
+class Settings(db.Model):
     """Application settings"""
     id = db.Column(db.Integer, primary_key=True)
     currency = db.Column(db.String(10), default='PKR')
@@ -722,16 +626,18 @@ class Settings(TenantScopedMixin, db.Model):
 
 
 class TenantWipeBackupHistory(db.Model):
+    """
+    Legacy multi-tenant table retained in some historical DB backups.
+    In single-store mode, the application does not use tenant wipe history.
+    """
     __tablename__ = 'tenant_wipe_backup_history'
     id = db.Column(db.Integer, primary_key=True)
-    tenant_id = db.Column(db.String(36), db.ForeignKey('tenant.id'), index=True, nullable=False)
-    tenant_name = db.Column(db.String(120), nullable=False)
+    tenant_name = db.Column(db.String(120), nullable=True)
     performed_by = db.Column(db.String(80), nullable=True)
-    performed_by_role = db.Column(db.String(20), nullable=True)
     targets = db.Column(db.String(1000), nullable=True)
-    backup_filename = db.Column(db.String(255), nullable=False)
-    backup_path = db.Column(db.String(1000), nullable=False)
-    wipe_status = db.Column(db.String(20), default='pending', index=True)  # pending|completed|failed
+    backup_filename = db.Column(db.String(255), nullable=True)
+    backup_path = db.Column(db.String(1000), nullable=True)
+    wipe_status = db.Column(db.String(20), default='pending', index=True)
     note = db.Column(db.String(500), nullable=True)
     created_at = db.Column(db.DateTime, default=pk_model_now, index=True)
 
@@ -766,14 +672,14 @@ class RootBackupEmailHistory(db.Model):
     created_at = db.Column(db.DateTime, default=pk_model_now, index=True)
 
 
-class StaffEmail(TenantScopedMixin, db.Model):
+class StaffEmail(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(200), unique=True, nullable=False)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=pk_model_now, index=True)
 
 
-class FollowUpReminder(TenantScopedMixin, db.Model):
+class FollowUpReminder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     pending_bill_id = db.Column(db.Integer, db.ForeignKey('pending_bill.id'), nullable=False)
     remind_at = db.Column(db.DateTime, nullable=False)
@@ -786,7 +692,7 @@ class FollowUpReminder(TenantScopedMixin, db.Model):
     pending_bill = db.relationship('PendingBill', backref=db.backref('reminders', lazy=True, cascade='all, delete-orphan'))
 
 
-class FollowUpContact(TenantScopedMixin, db.Model):
+class FollowUpContact(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     pending_bill_id = db.Column(db.Integer, db.ForeignKey('pending_bill.id'), nullable=False)
     reminder_id = db.Column(db.Integer, db.ForeignKey('follow_up_reminder.id'))
@@ -801,7 +707,7 @@ class FollowUpContact(TenantScopedMixin, db.Model):
     reminder = db.relationship('FollowUpReminder', backref=db.backref('closure_contact_logs', lazy=True))
 
 
-class ReconBasket(TenantScopedMixin, db.Model):
+class ReconBasket(db.Model):
     """Reconciliation Basket for Data Lab"""
     id = db.Column(db.Integer, primary_key=True)
     bill_no = db.Column(db.String(50))
@@ -822,7 +728,7 @@ class SchemaVersion(db.Model):
     applied_at = db.Column(db.DateTime, default=pk_model_now)
 
 
-class Account(TenantScopedMixin, db.Model):
+class Account(db.Model):
     """Financial accounts for managing cash flow"""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -843,7 +749,7 @@ class Account(TenantScopedMixin, db.Model):
     note = db.Column(db.String(500))
 
 
-class AccountCategory(TenantScopedMixin, db.Model):
+class AccountCategory(db.Model):
     """Business categories used to group accounts for receive/pay flows."""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, index=True)
@@ -852,7 +758,7 @@ class AccountCategory(TenantScopedMixin, db.Model):
     created_at = db.Column(db.DateTime, default=pk_model_now, index=True)
 
 
-class AccountTransaction(TenantScopedMixin, db.Model):
+class AccountTransaction(db.Model):
     """Transactions between accounts"""
     id = db.Column(db.Integer, primary_key=True)
     from_account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=True)
@@ -868,7 +774,7 @@ class AccountTransaction(TenantScopedMixin, db.Model):
     to_account = db.relationship('Account', foreign_keys=[to_account_id], backref='incoming_transactions')
 
 
-class FBMRentalItem(TenantScopedMixin, db.Model):
+class FBMRentalItem(db.Model):
     __tablename__ = 'fbm_rental_item'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
@@ -894,7 +800,7 @@ class FBMRentalItem(TenantScopedMixin, db.Model):
         return 'active'
 
 
-class FBMClient(TenantScopedMixin, db.Model):
+class FBMClient(db.Model):
     __tablename__ = 'fbm_client'
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(150), nullable=False)
@@ -908,7 +814,7 @@ class FBMClient(TenantScopedMixin, db.Model):
     rentals = db.relationship('FBMRental', backref='client', lazy=True)
 
 
-class FBMRental(TenantScopedMixin, db.Model):
+class FBMRental(db.Model):
     __tablename__ = 'fbm_rental'
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, db.ForeignKey('fbm_client.id'), nullable=False)
@@ -966,29 +872,8 @@ class RootRecoveryCode(db.Model):
     note = db.Column(db.String(300))
 
 
-@event.listens_for(db.session, 'do_orm_execute')
-def _add_tenant_criteria(execute_state):
-    if not execute_state.is_select:
-        return
-    if not get_enforce_tenant():
-        return
-    tenant_id = get_current_tenant_id()
-    if not tenant_id:
-        return
-    execute_state.statement = execute_state.statement.options(
-        with_loader_criteria(TenantScopedMixin, lambda cls: cls.tenant_id == tenant_id, include_aliases=True)
-    )
-
-
 @event.listens_for(db.session, 'before_flush')
-def _set_tenant_id(session, flush_context, instances):
-    tenant_id = get_current_tenant_id()
-    enforce = get_enforce_tenant()
-    if enforce and tenant_id:
-        for obj in session.new:
-            if isinstance(obj, TenantScopedMixin) and getattr(obj, 'tenant_id', None) is None:
-                obj.tenant_id = tenant_id
-
+def _normalize_bill_identities(session, flush_context, instances):
     # Normalize bill identities before writing any changed/new objects.
     for obj in list(session.new) + list(session.dirty):
         if isinstance(obj, Booking):
@@ -1028,9 +913,3 @@ def _set_tenant_id(session, flush_context, instances):
                     obj.invoice_no = _normalize_auto_bill_model(inv_no, namespace='EN') or _normalize_manual_bill_model(inv_no)
         elif isinstance(obj, BillCounter):
             obj.namespace = _normalize_namespace_model(getattr(obj, 'namespace', None))
-
-    for obj in session.dirty:
-        if isinstance(obj, TenantScopedMixin):
-            hist = inspect(obj).attrs.tenant_id.history
-            if hist.has_changes() and not is_root_context():
-                raise ValueError('tenant_id modification is not allowed')

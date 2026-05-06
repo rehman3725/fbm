@@ -7,33 +7,10 @@
     <div class="card border-success bg-dark text-white mb-4">
         <div class="card-header border-success bg-transparent d-flex justify-content-between align-items-center">
             <h5 class="card-title mb-0 text-success"><i class="bi bi-arrow-left-right me-2"></i>Full XLSX Transfer</h5>
-            <span class="small text-white-50">Single file, full tenant data</span>
+            <span class="small text-white-50">Single file, full store data</span>
         </div>
         <div class="card-body">
-            <div class="row g-2 align-items-end">
-                {% if current_user.role == 'root' %}
-                <div class="col-md-4">
-                    <label class="form-label small text-white-50 mb-1">Root Scope</label>
-                    <select id="rootScopeSelect" class="form-select bg-dark text-white border-secondary" onchange="toggleRootTenantPicker()">
-                        <option value="all_tenants">All Tenants</option>
-                        <option value="tenant">Single Tenant</option>
-                    </select>
-                </div>
-                <div class="col-md-8" id="rootTenantPicker" style="display:none;">
-                    <label class="form-label small text-white-50 mb-1">Target Tenant</label>
-                    <select id="rootTenantIdSelect" class="form-select bg-dark text-white border-secondary">
-                        <option value="">Select tenant</option>
-                        {% for t in tenants %}
-                        <option value="{{ t.id }}">{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% else %}
-                <div class="col-md-12">
-                    <p class="mb-0 small text-white-50">Tenant scope is enforced automatically for admin users.</p>
-                </div>
-                {% endif %}
-            </div>
+            <p class="mb-0 small text-white-50">Single-store mode: export/import always includes the full dataset.</p>
         </div>
     </div>
 
@@ -44,8 +21,8 @@
                     <h5 class="card-title mb-0 text-success"><i class="bi bi-download me-2"></i>Export Full XLSX</h5>
                 </div>
                 <div class="card-body">
-                    <p class="text-white-50">Downloads a single XLSX file containing all tenant data (master backup).</p>
-                    <form method="POST" action="{{ url_for('import_export.transfer_export') }}" onsubmit="return applyScopeToForm(this)">
+                    <p class="text-white-50">Downloads a single XLSX file containing all store data (backup).</p>
+                    <form method="POST" action="{{ url_for('import_export.transfer_export') }}">
                         <input type="hidden" name="sections" value="literal_all">
                         <button type="submit" class="btn btn-success w-100">
                             <i class="bi bi-file-earmark-excel me-2"></i>Export XLSX
@@ -62,8 +39,8 @@
                 </div>
                 <div class="card-body">
                     {% if full_raw_import_enabled %}
-                    <p class="text-white-50">Upload a single XLSX file. Choose append or overwrite for tenant data.</p>
-                    <form method="POST" action="{{ url_for('import_export.transfer_import') }}" enctype="multipart/form-data" onsubmit="return applyScopeToForm(this)">
+                    <p class="text-white-50">Upload a single XLSX file. Choose append or overwrite for store data.</p>
+                    <form method="POST" action="{{ url_for('import_export.transfer_import') }}" enctype="multipart/form-data">
                         <input type="hidden" name="sections" value="literal_all">
                         <div class="mb-3">
                             <label class="form-label small text-white-50 mb-1">XLSX File</label>
@@ -73,9 +50,9 @@
                             <label class="form-label small text-white-50 mb-1">Import Mode</label>
                             <select name="mode" class="form-select bg-dark text-white border-secondary">
                                 <option value="append">Append (safe)</option>
-                                <option value="replace_tenant_data">Overwrite Tenant Data</option>
+                                <option value="replace_tenant_data">Overwrite Store Data</option>
                             </select>
-                            <div class="small text-white-50 mt-2">Overwrite will remove existing tenant data before import.</div>
+                            <div class="small text-white-50 mt-2">Overwrite will remove existing store data before import.</div>
                         </div>
                         <button type="submit" class="btn btn-warning w-100" onclick="return confirmOverwrite(this)">
                             <i class="bi bi-arrow-repeat me-2"></i>Import XLSX
@@ -118,63 +95,14 @@
 </div>
 
 <script>
-function getScopeSelection() {
-    const isRoot = {{ 'true' if current_user.role == 'root' else 'false' }};
-    if (!isRoot) {
-        return { scope: 'tenant', tenantId: '' };
-    }
-    const scopeEl = document.getElementById('rootScopeSelect');
-    const tenantEl = document.getElementById('rootTenantIdSelect');
-    const scope = scopeEl ? scopeEl.value : 'all_tenants';
-    const tenantId = tenantEl ? (tenantEl.value || '') : '';
-    if (scope === 'tenant' && !tenantId) {
-        alert('Select target tenant first.');
-        return null;
-    }
-    return { scope, tenantId };
-}
-
-function applyScopeToForm(form) {
-    const s = getScopeSelection();
-    if (!s) return false;
-    let scopeInput = form.querySelector('input[name="scope"]');
-    if (!scopeInput) {
-        scopeInput = document.createElement('input');
-        scopeInput.type = 'hidden';
-        scopeInput.name = 'scope';
-        form.appendChild(scopeInput);
-    }
-    scopeInput.value = s.scope;
-    let tenantInput = form.querySelector('input[name="tenant_id"]');
-    if (!tenantInput) {
-        tenantInput = document.createElement('input');
-        tenantInput.type = 'hidden';
-        tenantInput.name = 'tenant_id';
-        form.appendChild(tenantInput);
-    }
-    tenantInput.value = s.tenantId || '';
-    return true;
-}
-
-function toggleRootTenantPicker() {
-    const scopeEl = document.getElementById('rootScopeSelect');
-    const picker = document.getElementById('rootTenantPicker');
-    if (!scopeEl || !picker) return;
-    picker.style.display = scopeEl.value === 'tenant' ? '' : 'none';
-}
-
 function confirmOverwrite(btn) {
     const form = btn && btn.form ? btn.form : null;
     if (!form) return true;
     const mode = form.querySelector('select[name="mode"]');
     if (mode && mode.value === 'replace_tenant_data') {
-        return confirm('Overwrite will delete existing tenant data before import. Continue?');
+        return confirm('Overwrite will delete existing store data before import. Continue?');
     }
     return true;
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    toggleRootTenantPicker();
-});
 </script>
-{% endblock %}
+{% endblock %}

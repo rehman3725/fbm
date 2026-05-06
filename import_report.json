@@ -1,0 +1,482 @@
+{
+  "status": "COMPLETED_WITH_ERRORS",
+  "timestamp": "2026-05-06T09:49:26.870338",
+  "dry_run": false,
+  "operations": [
+    {
+      "action": "backup",
+      "details": "\u2713 Backed up target DB: instance\\ahmed_cement.db.backup"
+    }
+  ],
+  "statistics": {
+    "total_inserted": 3509,
+    "total_skipped": 2,
+    "total_errors": 1,
+    "total_tables": 19
+  },
+  "errors": [],
+  "warnings": [],
+  "validation": {
+    "status": "WARNINGS",
+    "checks": [
+      {
+        "table": "audit_log",
+        "source_rows": 2,
+        "target_rows": 2,
+        "match": true
+      },
+      {
+        "table": "bill_counter",
+        "source_rows": 4,
+        "target_rows": 4,
+        "match": true
+      },
+      {
+        "table": "booking",
+        "source_rows": 124,
+        "target_rows": 124,
+        "match": true
+      },
+      {
+        "table": "booking_item",
+        "source_rows": 247,
+        "target_rows": 247,
+        "match": true
+      },
+      {
+        "table": "client",
+        "source_rows": 172,
+        "target_rows": 172,
+        "match": true
+      },
+      {
+        "table": "delivery",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "delivery_item",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "delivery_person",
+        "source_rows": 10,
+        "target_rows": 10,
+        "match": true
+      },
+      {
+        "table": "delivery_person_payment",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "delivery_rent",
+        "source_rows": 153,
+        "target_rows": 153,
+        "match": true
+      },
+      {
+        "table": "direct_sale",
+        "source_rows": 349,
+        "target_rows": 349,
+        "match": true
+      },
+      {
+        "table": "direct_sale_draft",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "direct_sale_item",
+        "source_rows": 601,
+        "target_rows": 601,
+        "match": true
+      },
+      {
+        "table": "entry",
+        "source_rows": 762,
+        "target_rows": 762,
+        "match": true
+      },
+      {
+        "table": "fbm_cash_drawer_category",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "fbm_cash_drawer_entry",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "follow_up_contact",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "follow_up_reminder",
+        "source_rows": 3,
+        "target_rows": 3,
+        "match": true
+      },
+      {
+        "table": "grn",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "grn_item",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "invoice",
+        "source_rows": 293,
+        "target_rows": 293,
+        "match": true
+      },
+      {
+        "table": "material",
+        "source_rows": 41,
+        "target_rows": 41,
+        "match": true
+      },
+      {
+        "table": "material_category",
+        "source_rows": 9,
+        "target_rows": 9,
+        "match": true
+      },
+      {
+        "table": "material_return",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "material_return_item",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "payment",
+        "source_rows": 152,
+        "target_rows": 152,
+        "match": true
+      },
+      {
+        "table": "pending_bill",
+        "source_rows": 521,
+        "target_rows": 521,
+        "match": true
+      },
+      {
+        "table": "permission",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "recon_basket",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "role",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "role_permission",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "root_backup_email_history",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "root_backup_settings",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "root_recovery_code",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "sale_delivery_persons",
+        "source_rows": 361,
+        "target_rows": 0,
+        "match": false
+      },
+      {
+        "table": "schema_version",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "settings",
+        "source_rows": 0,
+        "target_rows": 1,
+        "match": false
+      },
+      {
+        "table": "staff_email",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "supplier",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "supplier_payment",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "tenant",
+        "source_rows": 1,
+        "target_rows": 2,
+        "match": false
+      },
+      {
+        "table": "tenant_feature",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "tenant_wipe_backup_history",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "user",
+        "source_rows": 5,
+        "target_rows": 5,
+        "match": true
+      },
+      {
+        "table": "user_role",
+        "source_rows": 0,
+        "target_rows": 0,
+        "match": true
+      },
+      {
+        "table": "waive_off",
+        "source_rows": 63,
+        "target_rows": 63,
+        "match": true
+      }
+    ],
+    "issues": [
+      "\u26a0 sale_delivery_persons: 361 rows in source but 0 in target!"
+    ]
+  },
+  "table_details": [
+    {
+      "table": "tenant",
+      "source_rows": 1,
+      "inserted": 0,
+      "updated": 0,
+      "skipped": 1,
+      "errors": 0,
+      "details": [
+        "Row 9cbeb65a-1adf-4cc3-978c-d83c92b3a763 exists (id=9cbeb65a-1adf-4cc3-978c-d83c92b3a763)"
+      ]
+    },
+    {
+      "table": "user",
+      "source_rows": 5,
+      "inserted": 3,
+      "updated": 0,
+      "skipped": 1,
+      "errors": 1,
+      "details": [
+        "Error inserting row 2: UNIQUE constraint failed: user.id",
+        "Row 3 exists (id=2)"
+      ]
+    },
+    {
+      "table": "delivery_person",
+      "source_rows": 10,
+      "inserted": 10,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "material_category",
+      "source_rows": 9,
+      "inserted": 9,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "material",
+      "source_rows": 41,
+      "inserted": 41,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "client",
+      "source_rows": 172,
+      "inserted": 172,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "delivery_rent",
+      "source_rows": 153,
+      "inserted": 153,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "entry",
+      "source_rows": 762,
+      "inserted": 762,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "booking",
+      "source_rows": 124,
+      "inserted": 124,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "invoice",
+      "source_rows": 293,
+      "inserted": 293,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "payment",
+      "source_rows": 152,
+      "inserted": 152,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "pending_bill",
+      "source_rows": 521,
+      "inserted": 521,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "waive_off",
+      "source_rows": 63,
+      "inserted": 63,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "direct_sale",
+      "source_rows": 349,
+      "inserted": 349,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "booking_item",
+      "source_rows": 247,
+      "inserted": 247,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "direct_sale_item",
+      "source_rows": 601,
+      "inserted": 601,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "follow_up_reminder",
+      "source_rows": 3,
+      "inserted": 3,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "bill_counter",
+      "source_rows": 4,
+      "inserted": 4,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    },
+    {
+      "table": "audit_log",
+      "source_rows": 2,
+      "inserted": 2,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "details": []
+    }
+  ],
+  "completed_at": "2026-05-06T09:49:34.811629"
+}

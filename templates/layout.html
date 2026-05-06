@@ -544,11 +544,6 @@
                 {% endif %}
 
                 <div class="text-white-50 small fw-bold px-4 mt-4 mb-2 text-uppercase" style="font-size: 0.7rem;">System</div>
-                {% if current_user.role == 'root' %}
-                <a href="/tenants" class="nav-link {{ 'active' if request.path.startswith('/tenants') }}" onclick="closeSidebar()">
-                    <i class="bi bi-buildings"></i> Tenants
-                </a>
-                {% endif %}
                 {% if current_user.role != 'root' and (current_user.role == 'admin' or current_user.can_access_settings) %}
                 <a href="{{ url_for('void_audit_page') }}" class="nav-link {{ 'active' if request.path == '/void_audit' }}" onclick="closeSidebar()">
                     <i class="bi bi-shield-check"></i> Void Audit
