@@ -11746,17 +11746,63 @@ def login():
         return redirect(url_for('index'))
     if request.method == 'POST':
         username = (request.form.get('username') or '').strip()
+        username_norm = username.lower()
         password = str(request.form.get('password') or '')
         remember = (request.form.get('remember_me') or '').lower() in ('1', 'true', 'on', 'yes')
-        user = User.query.filter_by(username=username).order_by(User.id.asc()).first()
-        if user and user.password_hash and check_password_hash(user.password_hash, password):
-            if user.status != 'active':
+        user = User.query.filter(func.lower(func.trim(User.username)) == username_norm).order_by(User.id.asc()).first()
+
+        def _verify_and_upgrade_password(u, raw_password):
+            raw_password = str(raw_password or '')
+            if not u or not raw_password:
+                return False
+
+            stored_hash = (getattr(u, 'password_hash', None) or '').strip()
+            stored_plain = (getattr(u, 'password_plain', None) or '').strip()
+
+            # 1) Normal Werkzeug hash verification.
+            if stored_hash:
+                try:
+                    if check_password_hash(stored_hash, raw_password):
+                        return True
+                except Exception:
+                    # Some legacy DBs stored plaintext in password_hash; fall back below.
+                    pass
+
+            # 2) Legacy plaintext fallbacks (upgrade on success).
+            legacy_match = False
+            if stored_plain and stored_plain == raw_password:
+                legacy_match = True
+            elif stored_hash and stored_hash == raw_password:
+                legacy_match = True
+
+            if legacy_match:
+                try:
+                    u.password_hash = generate_password_hash(raw_password)
+                    u.password_plain = None
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                return True
+
+            return False
+
+        if user and _verify_and_upgrade_password(user, password):
+            if (user.status or '').strip().lower() != 'active':
                 flash('Account suspended', 'danger')
                 return render_template('login.html')
             login_user(user, remember=remember)
             session['role'] = user.role
             next_url = request.args.get('next')
             return redirect(next_url or url_for('index'))
+        try:
+            logging.getLogger('auth').info(
+                "Login failed username=%s exists=%s has_hash=%s",
+                username,
+                bool(user),
+                bool(getattr(user, 'password_hash', None))
+            )
+        except Exception:
+            pass
         flash('Invalid Credentials', 'danger')
     return render_template('login.html')
 

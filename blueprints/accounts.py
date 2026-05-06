@@ -11,7 +11,7 @@ from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 from sqlalchemy import func, or_, and_
 from sqlalchemy.exc import IntegrityError
-from models import db, Account, AccountCategory, AccountTransaction, Payment, SupplierPayment, FbmCashDrawerEntry, DirectSale, GRN, GRNItem, Supplier, Client, Booking, PendingBill
+from models import db, Account, AccountCategory, AccountTransaction, Payment, SupplierPayment, FbmCashDrawerEntry, DirectSale, GRN, GRNItem, Supplier, Client, Booking, PendingBill, BillCounter
 from utils.audit import audit_log
 
 # Module configuration
@@ -28,12 +28,96 @@ accounts_bp = Blueprint('accounts', __name__)
 PK_TZ = ZoneInfo('Asia/Karachi')
 logger = logging.getLogger(__name__)
 
+AUTO_BILL_NS_DEFAULT = 'GEN'
+AUTO_BILL_NAMESPACES = {
+    'PAYMENT': 'CP',
+}
+
+
+def _normalize_namespace(namespace):
+    ns = (namespace or AUTO_BILL_NS_DEFAULT).strip().upper()
+    if not ns:
+        ns = AUTO_BILL_NS_DEFAULT
+    if not re.fullmatch(r'[A-Z][A-Z0-9]{1,7}', ns):
+        ns = AUTO_BILL_NS_DEFAULT
+    return ns
+
+
+def _extract_sb_parts(value):
+    raw = (value or '').strip()
+    if not raw:
+        return (None, None)
+    txt = raw.upper().replace(' ', '')
+    m = re.match(r'^SB-([A-Z][A-Z0-9]{1,7})-(\d+)$', txt)
+    if m:
+        return (_normalize_namespace(m.group(1)), int(m.group(2)))
+    # legacy "SB NO." formats
+    m = re.search(r'SB\s*NO\.\s*([A-Z][A-Z0-9]{1,7})\s*[-#]?\s*(\d+)', raw.upper())
+    if m:
+        return (_normalize_namespace(m.group(1)), int(m.group(2)))
+    return (None, None)
+
+
+def _format_auto_bill(namespace, seq):
+    ns = _normalize_namespace(namespace)
+    return f"SB-{ns}-{int(seq)}"
+
+
+def _get_or_create_bill_counter(namespace):
+    ns = _normalize_namespace(namespace)
+    counter = BillCounter.query.filter_by(namespace=ns).first()
+    if counter:
+        return counter
+    counter = BillCounter(namespace=ns, count=1000)
+    db.session.add(counter)
+    db.session.flush()
+    return counter
+
+
+def _max_existing_seq_for_namespace(namespace):
+    ns = _normalize_namespace(namespace)
+    max_seq = 0
+    rows = Payment.query.with_entities(Payment.auto_bill_no).filter(
+        Payment.auto_bill_no.isnot(None),
+        func.upper(func.trim(Payment.auto_bill_no)).like(f"SB-{ns}-%")
+    ).all()
+    for (val,) in rows:
+        parsed_ns, seq = _extract_sb_parts(val or '')
+        if parsed_ns == ns and seq is not None:
+            try:
+                max_seq = max(max_seq, int(seq))
+            except Exception:
+                continue
+    return max_seq
+
+
+def _sync_bill_counter_with_db(namespace):
+    ns = _normalize_namespace(namespace)
+    counter = _get_or_create_bill_counter(ns)
+    max_seq = _max_existing_seq_for_namespace(ns)
+    next_seq = (max_seq + 1) if max_seq else int(counter.count or 1000)
+    if int(counter.count or 0) < next_seq:
+        counter.count = next_seq
+        db.session.flush()
+    return int(counter.count or 1000)
+
+
+def get_next_bill_no(namespace):
+    ns = _normalize_namespace(namespace)
+    counter = _get_or_create_bill_counter(ns)
+    current = _sync_bill_counter_with_db(ns)
+    bill_no = _format_auto_bill(ns, current)
+    counter.count = current + 1
+    db.session.flush()
+    return bill_no
+
 
 @accounts_bp.before_request
 def _accounts_permission_check():
     if not current_user.is_authenticated:
         return
-    if current_user.role != 'admin' and not getattr(current_user, 'can_manage_payments', False):
+    role_norm = (getattr(current_user, 'role', '') or '').strip().lower()
+    if role_norm != 'admin' and not getattr(current_user, 'can_manage_payments', False):
         from flask import abort
         abort(403)
 
@@ -1097,7 +1181,8 @@ def add_transaction():
                     account_name=receive_account.name,
                     bank_name=(receive_account.bank_name or ''),
                     account_no=(receive_account.account_number or ''),
-                    payment_account_id=receive_account.id
+                    payment_account_id=receive_account.id,
+                    auto_bill_no=get_next_bill_no(AUTO_BILL_NAMESPACES['PAYMENT'])
                 )
                 db.session.add(payment)
                 db.session.flush()

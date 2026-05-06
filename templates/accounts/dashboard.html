@@ -700,6 +700,7 @@ function setReceiveSourceMode() {
     const fromAccount = document.getElementById('receive_from_account_id');
     const sourceLabel = document.getElementById('receive_source_label');
     const discountInput = document.getElementById('receive_discount');
+    const receiveAccountSelect = document.getElementById('receive_account_id');
     const txMode = document.querySelector('input[name="tx_mode"]:checked');
     const isReceiveMode = txMode && txMode.value === 'receive';
     if (!sourceType || !clientWrap || !accountWrap || !otherWrap || !discountWrap || !clientInput || !fromAccount || !sourceLabel || !discountInput) {
@@ -708,7 +709,10 @@ function setReceiveSourceMode() {
 
     const source = (sourceType.value || 'client').toLowerCase();
     const receiveFromAccount = document.getElementById('receive_from_account_id');
-    const selectedCategoryAccounts = receiveSourceAccounts.filter(item => (item.source_category || '').toLowerCase() === source);
+    const receiveAccountId = receiveAccountSelect ? (receiveAccountSelect.value || '') : '';
+    const selectedCategoryAccounts = receiveSourceAccounts
+        .filter(item => (item.source_category || '').toLowerCase() === source)
+        .filter(item => !receiveAccountId || String(item.id) !== String(receiveAccountId));
     const isClient = source === 'client_ledger';
     const isOther = source === 'other_source';
     const isAccountCategory = !isClient && !isOther;
@@ -752,16 +756,18 @@ function setPayTargetMode() {
         return;
     }
 
+    const txMode = document.querySelector('input[name="tx_mode"]:checked');
+    const isPayMode = txMode && (txMode.value || '').toLowerCase() === 'pay';
     const target = (payTarget.value || '').toLowerCase();
 
     payToWrap.classList.toggle('d-none', target !== 'company_transfer');
     supplierWrap.classList.toggle('d-none', target !== 'supplier');
     targetLabelWrap.classList.toggle('d-none', !['loan', 'personal_expense', 'other_expense'].includes(target));
 
-    payTo.required = target === 'company_transfer';
+    payTo.required = isPayMode && target === 'company_transfer';
     supplierHidden.required = false;
-    if (supplierInput) supplierInput.required = target === 'supplier';
-    targetLabel.required = ['loan', 'personal_expense', 'other_expense'].includes(target);
+    if (supplierInput) supplierInput.required = isPayMode && target === 'supplier';
+    targetLabel.required = isPayMode && ['loan', 'personal_expense', 'other_expense'].includes(target);
 }
 
 function updateDueDisplay() {
@@ -936,6 +942,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const modeInputs = document.querySelectorAll('input[name="tx_mode"]');
     const targetSelect = document.getElementById('pay_target');
     const receiveSourceType = document.getElementById('receive_from_category');
+    const receiveAccountSelect = document.getElementById('receive_account_id');
     const clientInput = document.getElementById('receiveClientInput');
     modeInputs.forEach(input => input.addEventListener('change', setTransactionMode));
     const methodSelect = document.querySelector('select[name="method"]');
@@ -947,6 +954,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     if (targetSelect) targetSelect.addEventListener('change', setPayTargetMode);
     if (receiveSourceType) receiveSourceType.addEventListener('change', setReceiveSourceMode);
+    if (receiveAccountSelect) receiveAccountSelect.addEventListener('change', setReceiveSourceMode);
     if (clientInput) {
         clientInput.addEventListener('input', updateDueDisplay);
         clientInput.addEventListener('blur', updateDueDisplay);
